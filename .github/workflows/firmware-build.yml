@@ -1,0 +1,42 @@
+name: Firmware Build
+
+on:
+  push:
+    paths:
+      - 'firmware/**'
+  pull_request:
+    paths:
+      - 'firmware/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install nRF Connect toolchain
+        uses: nrfconnect/action-nrf-connect@v1
+        with:
+          sdk-version: 3.1.1
+          toolchain-version: v3.1.1
+
+      - name: West update
+        run: west update
+
+      - name: Build firmware
+        working-directory: firmware
+        run: |
+          west build -b nrf54l15dk/nrf54l15/cpuapp/ns -- \
+          -DEXTRA_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay" \
+          -DCONFIG_SPEED_OPTIMIZATIONS=y
+
+      - name: Archive firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrf54l15-firmware
+          path: |
+            firmware/build/zephyr/zephyr.hex
+            firmware/build/zephyr/zephyr.bin
+            firmware/build/zephyr/merged.hex
