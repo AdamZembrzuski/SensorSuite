@@ -1,13 +1,13 @@
 name: Firmware Build
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'firmware/**'
   pull_request:
     paths:
       - 'firmware/**'
-  workflow_dispatch: 
 
 jobs:
   build:
@@ -16,28 +16,56 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: project
 
-      # Cache the SDK installation — saves ~5 min on every run
-      - name: Cache nRF Connect SDK + toolchain
-        id: cache-sdk
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git cmake ninja-build gperf ccache \
+            python3-pip python3-venv wget xz-utils
+
+      - name: Cache west workspace
+        id: cache-west
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.local/nrfconnect
-            ~/nrfconnect
-          key: nrf-sdk-3.1.1
-          restore-keys: nrf-sdk-
+          path: nrfconnect
+          key: west-nrf-sdk-3.1.1
+          restore-keys: west-nrf-sdk-
 
-      - name: Install nRF Connect SDK 3.1.1
-        uses: nrfconnect/action-nrf-connect@v1
+      - name: Initialise west workspace
+        if: steps.cache-west.outputs.cache-hit != 'true'
+        run: |
+          pip3 install west
+          west init -m https://github.com/nrfconnect/sdk-nrf \
+            --mr v3.1.1 nrfconnect
+          cd nrfconnect
+          west update
+          pip3 install -r zephyr/scripts/requirements.txt
+          pip3 install -r nrf/scripts/requirements.txt
+          pip3 install -r bootloader/mcuboot/scripts/requirements.txt
+
+      - name: Cache Zephyr SDK toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
         with:
-          sdk-version: 3.1.1
-          toolchain-version: v3.1.1
+          path: ~/zephyr-sdk
+          key: zephyr-sdk-0.17.0
 
-      - name: West update
-        run: west update
+      - name: Install Zephyr SDK
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz
+          tar -xf zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz -C ~/
+          mv ~/zephyr-sdk-0.17.0 ~/zephyr-sdk
+          ~/zephyr-sdk/setup.sh -t arm-zephyr-eabi
 
-      # ccache avoids recompiling unchanged translation units
+      - name: Configure ccache
+        run: |
+          ccache --max-size=500M
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -45,31 +73,25 @@ jobs:
           key: ccache-nrf54l15-${{ github.sha }}
           restore-keys: ccache-nrf54l15-
 
-      - name: Configure ccache
-        run: |
-          sudo apt-get install -y ccache
-          ccache --max-size=500M
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+      - name: Copy application into workspace
+        run: cp -r project/firmware nrfconnect/app
 
       - name: Build
-        working-directory: firmware
+        working-directory: nrfconnect
         run: |
-          west build \
+          west build app \
             -b nrf54l15dk/nrf54l15/cpuapp/ns \
             -p auto \
             -- \
-            -DBOARD_ROOT=$(pwd) \
+            -DBOARD_ROOT=$(pwd)/app \
             -DCONF_FILE=prj.conf \
             -DEXTRA_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay"
 
-      # Retain the hex for download from the Actions run page
-      - name: Upload build artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ github.sha }}
           path: |
-            firmware/build/zephyr/zephyr.hex
-            firmware/build/zephyr/zephyr.elf
+            nrfconnect/build/zephyr/zephyr.hex
+            nrfconnect/build/zephyr/zephyr.elf
           retention-days: 30
