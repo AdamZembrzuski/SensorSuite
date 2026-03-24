@@ -19,13 +19,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-    
-      - name: Source nRF toolchain environment
-        run: |
-          source /opt/nrfconnect/ncs/zephyr-env.sh
-          west --version
 
-      - name: Create nRF Connect SDK workspace
+      - name: Install pip
+        run: |
+          apt-get update
+          apt-get install -y python3-pip
+
+      - name: Install west
+        run: |
+          python3 -m pip install --user --upgrade west
+
+      - name: Create NCS workspace
         run: |
           python3 -m west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.1.1 ncs
           cd ncs
@@ -35,10 +39,10 @@ jobs:
       - name: Build firmware
         run: |
           cd ncs
-          python3 -m west build \
+          python3 -m west build -p always \
+            -b nrf54l15dk/nrf54l15/cpuapp/ns \
             -s ../firmware \
             -d ../firmware/build \
-            -b nrf54l15dk/nrf54l15/cpuapp/ns \
             -- \
             -DEXTRA_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay" \
             -DCONFIG_SPEED_OPTIMIZATIONS=y
