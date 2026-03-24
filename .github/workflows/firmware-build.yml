@@ -7,11 +7,12 @@ on:
   pull_request:
     paths:
       - 'firmware/**'
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
       image: ghcr.io/nrfconnect/sdk-nrf-toolchain:v3.1.1
 
@@ -19,21 +20,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install West
+      - name: Install west
         run: |
+          python3 -m pip install --user --upgrade west
 
-      - name: Initialize West
+      - name: Create nRF Connect SDK workspace
         run: |
-          west init -l firmware
-          west update
-          west zephyr-export
-          
-          pip3 install -r zephyr/scripts/requirements.txt --break-system-packages || pip3 install -r zephyr/scripts/requirements.txt
+          python3 -m west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.1.1 ncs
+          cd ncs
+          python3 -m west update
+          python3 -m west zephyr-export
 
       - name: Build firmware
-        working-directory: firmware
         run: |
-          west build -p always -b nrf54l15dk/nrf54l15/cpuapp/ns -- \
+          cd ncs
+          python3 -m west build \
+            -s ../firmware \
+            -d ../firmware/build \
+            -b nrf54l15dk/nrf54l15/cpuapp/ns \
+            -- \
             -DEXTRA_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay" \
             -DCONFIG_SPEED_OPTIMIZATIONS=y
 
