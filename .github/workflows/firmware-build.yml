@@ -19,10 +19,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install west
+    
+      - name: Source nRF toolchain environment
         run: |
-          python3 -m pip install --user --upgrade west
+          source /opt/nrfconnect/ncs/zephyr-env.sh
+          west --version
 
       - name: Create nRF Connect SDK workspace
         run: |
