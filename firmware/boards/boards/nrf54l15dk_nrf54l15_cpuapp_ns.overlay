@@ -1,0 +1,99 @@
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
+
+/* Force regulators to start in DC/DC mode */
+&vregmain {
+    status = "okay";
+    regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+// Enable for custom PCB
+&hfxo {
+	status = "okay";
+	clock-frequency = <32000000>;
+	//startup-time-us = <1400>; //placeholder
+	load-capacitors = "internal";
+	load-capacitance-femtofarad = <14250>;
+};
+
+
+&lfxo {
+	status = "okay";
+	clock-frequency = <32768>;
+	load-capacitors = "external";
+};
+
+
+
+&i2c22 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	pinctrl-0 = <&i2c22_default>;
+	pinctrl-1 = <&i2c22_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	vl53l4cd: vl53l4cd@29 {   /* 'vl53l4cd' is the node label */
+		compatible = "zephyr,generic-i2c"; 
+		reg = <0x29>;                /* I2C 7-bit address */
+		status = "okay";
+	};
+
+	sht30: sht30@44 {
+        compatible = "sensirion,sht3xd";
+        reg = <0x44>;
+        status = "okay";
+    };
+};
+
+&pinctrl {
+	i2c22_default: i2c22_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SCL, 1, 11)>, <NRF_PSEL(TWIM_SDA, 1, 12)>;
+			bias-pull-up;
+		};
+	};
+
+	i2c22_sleep: i2c22_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SCL, 1, 11)>, <NRF_PSEL(TWIM_SDA, 1, 12)>;
+			bias-disable;
+			low-power-enable;
+		};
+	};
+};
+
+&button0 {
+    status = "disabled";
+};
+&button1 {
+    status = "disabled";
+};
+&button2 {
+    status = "disabled";
+};
+&button3 {
+    status = "disabled";
+};
+&led0 {
+    status = "disabled";
+};
+&led1 {
+    status = "disabled";
+};
+&led2 {
+    status = "disabled";
+};
+&led3 {
+    status = "disabled";
+};
+
+&pwm_led1 {
+    status = "disabled";
+};
+
+&spi00 {
+    status = "disabled";
+};
+
+&mx25r64 {
+    status = "disabled";
+};
