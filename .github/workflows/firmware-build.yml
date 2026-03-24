@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04   # pin OS — 'latest' drifts and breaks builds
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -35,7 +35,7 @@ jobs:
       - name: Set up Python venv + west
         run: |
           python3 -m venv ~/.venv
-          echo "PATH=$HOME/.venv/bin:$PATH" >> $GITHUB_ENV
+          echo "$HOME/.venv/bin" >> $GITHUB_PATH
           ~/.venv/bin/pip install west
 
       - name: Cache Zephyr SDK
@@ -45,7 +45,7 @@ jobs:
           path: ~/zephyr-sdk
           key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}
 
-      - name: Install Zephyr SDK (arm only)
+      - name: Install Zephyr SDK
         if: steps.cache-zephyr-sdk.outputs.cache-hit != 'true'
         run: |
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${{ env.ZEPHYR_SDK_VERSION }}/zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}_linux-x86_64_minimal.tar.xz
@@ -67,7 +67,11 @@ jobs:
             --mr ${{ env.NCS_VERSION }} ncs
           cd ncs
           west update --narrow -o=--depth=1
-          west zephyr-export
+
+      # Always run — pip state is not cached with the workspace
+      - name: Install Python requirements
+        run: |
+          cd ncs
           pip install -r zephyr/scripts/requirements.txt \
                       -r nrf/scripts/requirements.txt \
                       -r bootloader/mcuboot/scripts/requirements.txt
@@ -86,10 +90,11 @@ jobs:
           echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
 
       - name: Build
+        working-directory: ncs
         run: |
           west build \
-            -s firmware-repo/firmware \
-            -d build \
+            -s ${{ github.workspace }}/firmware-repo/firmware \
+            -d ${{ github.workspace }}/build \
             -b nrf54l15dk/nrf54l15/cpuapp/ns \
             -p auto \
             -- \
