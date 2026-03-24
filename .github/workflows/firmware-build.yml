@@ -19,11 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install West
+        run: |
+
       - name: Initialize West
         run: |
           west init -l firmware
           west update
           west zephyr-export
+          
+          pip3 install -r zephyr/scripts/requirements.txt --break-system-packages || pip3 install -r zephyr/scripts/requirements.txt
 
       - name: Build firmware
         working-directory: firmware
