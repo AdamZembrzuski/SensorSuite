@@ -54,5 +54,5 @@ RTT logging is enabled by default. Connect via the nRF Connect for Desktop
 terminal or a J-Link RTT Viewer.
 
 ### Key Kconfig Options
-For lowest current consumption **disable all logging** in `prj.conf` this will reduce current consumption by roughly 200μA.
+For lowest current consumption **disable all logging** in `prj.conf` this will reduce current consumption by roughly 200μA.<br>
 Key Bluetooth settings such as device name or connection settings can be adjusted in `prj.conf`.
