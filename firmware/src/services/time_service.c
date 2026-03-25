@@ -3,7 +3,7 @@
 
 static int64_t unix_base_time_ms = 0; 
 
-//No synchronisation necessary
+//No thread synchronisation necessary
 void set_real_time(int64_t current_unix_time_ms) {
 
     unix_base_time_ms = current_unix_time_ms - k_uptime_get();
