@@ -868,7 +868,7 @@ int main(void)
 
 	err = gpio_pin_configure_dt(&XSHUT_spec, GPIO_PULL_UP | GPIO_OUTPUT_INACTIVE);
 	if (err) {
-		for (;;) { }
+        error_fatal(FATAL_VL53_INIT);
 	}
 
 	gpio_pin_set_dt(&XSHUT_spec, 0);
