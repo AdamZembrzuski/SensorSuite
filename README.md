@@ -46,7 +46,7 @@ The included example firmware detects when people pass through a doorway into a 
 - Press "Generate and build"
 
 ### Flashing Process
-If building for the DK skip step 1
+If flashing the DK skip step 1
 
 - Connect TC2030-IDC-NL to the DK, the DK will automatically detect it and change target to your connected PCB.
 - Press flash and erase. If a module is being flashed for the first time, it may have protections enabled. Follow the advice in the vscode pop-up.
