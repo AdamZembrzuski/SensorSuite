@@ -24,7 +24,7 @@ It integrates a VL53L4CD ToF sensor from ST Microelectronics that can be used fo
 
 The sensors are accompanied by the Nordic NRF54L15 implemented via the U-Blox Nora B206 module enabling BLE 6.0, Matter, Thread, Zigbee or other (proprietary) 2.4GHz communication. The entire system is ultra low power (400uA @ 2V8 in human detection example) and is powered from a common CR2032 coin cell.<br><br>
 
-The included firmware detects when people pass through a doorway into a closed space. A machine learning then models when the space is empty so that services (e.g. heating or lighting) can be disabled.
+The included example firmware detects when people pass through a doorway into a closed space. Later a machine learning model (ran on a computer) predicts when the space is empty so that services (e.g. heating or lighting) can be disabled.
 ##
 View the PCB and schematic entirely in your browser on [KiCanvas](https://kicanvas.org/?repo=https%3A%2F%2Fgithub.com%2FAZT-GH%2FSensorSuite%2Ftree%2Fmain%2Fhardware)
 
