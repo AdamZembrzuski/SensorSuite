@@ -366,10 +366,10 @@ static uint8_t main_cmnd_cb(uint8_t command){
 }
 
 static struct sense_cb sense_callbacks = {
-.count_cb = main_count_cb,
-.temp_cb = main_temp_cb,
-.humid_cb = main_humid_cb,
-.cmnd_cb = main_cmnd_cb
+    .count_cb = main_count_cb,
+    .temp_cb = main_temp_cb,
+    .humid_cb = main_humid_cb,
+    .cmnd_cb = main_cmnd_cb
 };
 
 
