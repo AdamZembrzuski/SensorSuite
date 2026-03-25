@@ -53,6 +53,8 @@
 
 #define I2C_CHECK_PERIOD_MINS 30
 
+/* Schedule definitions */
+#define SCHEDULE_MAX_SLEEP_MS (3600 * 1000/2)
 
 /* Command definitions */
 
@@ -67,14 +69,21 @@
 #define CMND_STREAM_STOP 0x11
 
 // Firmware version command
-#define CMND_FW_VER 0x20 
+#define CMND_FW_VER 0x20
+
+// Scheduling commands
+#define CMND_SCHEDULE_8_16          0x30
+#define CMND_SCHEDULE_8_18          0x31
+#define CMND_SCHEDULE_9_21          0x32
+#define CMND_SCHEDULE_DISABLED      0x33
+#define CMND_SCHEDULE_WKND_DISABLE  0x34
+#define CMND_SCHEDULE_WKND_ENABLE   0x35
 
 static void adv_work_handler(struct k_work *work);
 static void bt_off_work_handler(struct k_work *work);
 static void security_work_handler(struct k_work *work);
 static void counter_work_handler(struct k_work *work);
 static void vl53_stop_work_handler(struct k_work *work);
-static void vl53_start_work_handler(struct k_work *work);
 static void ambient_work_handler(struct k_work *work);
 static void i2c_check_work_handler(struct k_work *work);
 
@@ -118,7 +127,6 @@ K_WORK_DELAYABLE_DEFINE(counter_work, counter_work_handler);
 static const struct device *const i2c_dev_22 = DEVICE_DT_GET(DT_NODELABEL(i2c22));
 
 K_WORK_DEFINE(vl53_stop_work, vl53_stop_work_handler);
-K_WORK_DEFINE(vl53_start_work, vl53_start_work_handler);
 
 /* SHT30 variables */
 static const struct device *const sht30_dev = DEVICE_DT_GET(DT_NODELABEL(sht30));
@@ -171,10 +179,37 @@ static volatile bool logging_paused = false;
 
 LOG_MODULE_REGISTER(azss, LOG_LEVEL_DBG);
 
+/* Scheduling variables */
+
+typedef enum {
+    SCHEDULE_8_16 = 0,   /* 08:00–16:00 */
+    SCHEDULE_8_18 = 1,   /* 08:00–18:00 */
+    SCHEDULE_9_21 = 2,   /* 09:00–21:00 */
+    SCHEDULE_DISABLED = 3, /* Disabled */
+} schedule_preset_t;
+
+static const struct {
+    uint8_t start_h;
+    uint8_t end_h;
+} schedule_hours[] = {
+    [SCHEDULE_8_16] = { 8,  16 },
+    [SCHEDULE_8_18] = { 8,  18 },
+    [SCHEDULE_9_21] = { 9,  21 },
+	[SCHEDULE_DISABLED] = { 0,  24 },
+};
+
+static schedule_preset_t active_schedule = SCHEDULE_DISABLED;
+static bool              weekends_disabled = false;
+
+static bool              vl53_sched_off = false;
+
+static void schedule_work_handler(struct k_work *work);
+static void vl53_sched_reinit_work_handler(struct k_work *work);
+
+K_WORK_DELAYABLE_DEFINE(schedule_work,          schedule_work_handler);
+K_WORK_DELAYABLE_DEFINE(vl53_sched_reinit_work, vl53_sched_reinit_work_handler);
 
 /* FUNCTIONS */
-
-
 
 /* Function to request a connection interval */
 static int request_conn_interval_ms(struct bt_conn *conn, uint16_t min_ms, uint16_t max_ms, uint16_t latency, uint16_t timeout_ms)
@@ -360,6 +395,36 @@ static uint8_t main_cmnd_cb(uint8_t command){
                 case CMND_FW_VER:
                         return FW_VERSION;
 
+				case CMND_SCHEDULE_8_16:
+					active_schedule = SCHEDULE_8_16;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
+				case CMND_SCHEDULE_8_18:
+					active_schedule = SCHEDULE_8_18;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
+				case CMND_SCHEDULE_9_21:
+					active_schedule = SCHEDULE_9_21;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
+				case CMND_SCHEDULE_DISABLED:
+					active_schedule = SCHEDULE_DISABLED;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
+				case CMND_SCHEDULE_WKND_DISABLE:
+					weekends_disabled = true;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
+				case CMND_SCHEDULE_WKND_ENABLE:
+					weekends_disabled = false;
+					k_work_reschedule(&schedule_work, K_NO_WAIT);
+					return 0;
+
                 default:
                         return 1;
                 }
@@ -497,7 +562,9 @@ static void on_connected(struct bt_conn *conn_c, uint8_t err)
 	logging_paused = true;
 	ambient_paused = true;
 
-	k_work_submit(&vl53_stop_work);
+	if (!vl53_sched_off) {
+		k_work_submit(&vl53_stop_work);
+	}
 	//k_work_reschedule(&security_work, K_MSEC(2000)); OBSOLETE - client handles security
 }
 
@@ -515,16 +582,11 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 
 	LOG_INF("Disconnected, reason 0x%02X", reason);
 
-	int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec, GPIO_INT_EDGE_TO_ACTIVE);
-	if (err) {
-		LOG_ERR("Failed to re-enable GPIO interrupt (%d)", err);
-		error_fatal(FATAL_GPIO_INIT);
+	if (!vl53_sched_off){
+		logging_paused = false;
+		k_work_reschedule(&vl53_sched_reinit_work, K_MSEC(10));
 	}
-
-	logging_paused = false;
 	ambient_paused = false;
-
-	k_work_submit(&vl53_start_work);
 	k_work_reschedule(&ambient_work, K_NO_WAIT);
 	k_work_schedule(&bt_off_work, K_MSEC(100));
 }
@@ -796,25 +858,15 @@ static void vl53_stop_work_handler(struct k_work *work)
 	}
 }
 
-static void vl53_start_work_handler(struct k_work *work)
-{
-	ARG_UNUSED(work);
-
-	k_mutex_lock(&i2c22_mutex, K_FOREVER);
-	pm_i2c22_get_or_fatal();
-	uint8_t status = VL53L4CD_ULP_StartRanging(0);
-	pm_i2c22_put_or_fatal();
-	k_mutex_unlock(&i2c22_mutex);
-
-	if (status) {
-		LOG_ERR("VL53L4CD start failed: %u", status);
-		error_fatal(FATAL_VL53_START);
-	}
-}
 
 static void i2c_check_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
+
+	if (vl53_sched_off) {
+        k_work_reschedule(&i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
+        return;
+    }
 
 	k_mutex_lock(&i2c22_mutex, K_FOREVER);
 	pm_i2c22_get_or_fatal();
@@ -835,7 +887,7 @@ static void i2c_check_work_handler(struct k_work *work)
 
 }
 
-static void i2c22_scan(void)
+/*static void i2c22_scan(void)
 {
     for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
         int err = i2c_write(i2c_dev_22, NULL, 0, addr);
@@ -843,6 +895,123 @@ static void i2c22_scan(void)
             LOG_INF("I2C ACK at 0x%02X", addr);
         }
     }
+}*/
+
+static bool is_business_hours(void)
+{
+
+	if (!is_time_set()) {
+		return true;
+	}
+
+    int64_t unix_sec = get_current_timestamp() / 1000;
+
+    if (weekends_disabled) {
+        /* Unix epoch (Jan 1 1970) was a Thursday = day 4.
+         * 0 = Sunday, 6 = Saturday.                        */
+        uint8_t dow = (uint8_t)(((unix_sec / 86400) + 4) % 7);
+        if (dow == 0 || dow == 6) {
+            return false;
+        }
+    }
+
+    uint32_t sec_in_day = (uint32_t)(unix_sec % 86400);
+    uint8_t  hour       = (uint8_t)(sec_in_day / 3600);
+
+    return (hour >= schedule_hours[active_schedule].start_h &&
+            hour <  schedule_hours[active_schedule].end_h);
+}
+
+static int64_t ms_until_next_transition(void)
+{
+    if (!is_time_set()) {
+        return 60 * 1000;
+    }
+
+    int64_t unix_sec   = get_current_timestamp() / 1000;
+    int64_t sec_in_day = unix_sec % 86400;
+
+    int64_t start_sec = (int64_t)schedule_hours[active_schedule].start_h * 3600;
+    int64_t end_sec   = (int64_t)schedule_hours[active_schedule].end_h   * 3600;
+
+    int64_t day_base = unix_sec - sec_in_day;
+    int64_t next_sec;
+
+    if (sec_in_day < start_sec) {
+        next_sec = day_base + start_sec;
+    } else if (sec_in_day < end_sec) {
+        next_sec = day_base + end_sec;
+    } else {
+        next_sec = day_base + 86400 + start_sec;
+    }
+
+    int64_t delay_ms = (next_sec - unix_sec) * 1000;
+    return MAX(delay_ms, 1000);
+}
+
+static void vl53_sched_reinit_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    /* Re-initialise fully — XSHUT cycle resets all sensor registers. */
+    VL53L4CD_user_init();
+
+	int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
+												GPIO_INT_EDGE_TO_ACTIVE);
+	if (err) {
+		LOG_ERR("Schedule: failed to re-enable GPIO interrupt (%d)", err);
+		error_fatal(FATAL_GPIO_INIT);
+	}
+
+    LOG_INF("Schedule: VL53L4CD re-initialised");
+}
+
+static void schedule_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    bool    should_be_active = is_business_hours();
+
+	if (should_be_active && vl53_sched_off) {
+		vl53_sched_off = false;
+		gpio_pin_set_dt(&XSHUT_spec, 0);
+
+		if (conn == NULL) {
+			logging_paused = false;
+			k_work_reschedule(&vl53_sched_reinit_work, K_MSEC(10));
+			k_work_reschedule(&ambient_work, K_NO_WAIT);
+		}
+
+        LOG_INF("Schedule: entering business hours (%02d:00–%02d:00)",
+                schedule_hours[active_schedule].start_h,
+                schedule_hours[active_schedule].end_h);
+
+    } else if (!should_be_active && !vl53_sched_off) {
+        vl53_sched_off = true;
+        logging_paused = true;
+
+        k_work_cancel_delayable(&counter_work);
+
+        if (conn == NULL) {
+            int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
+                                                      GPIO_PULL_UP | GPIO_INT_DISABLE);
+            if (err) {
+                LOG_ERR("Schedule: failed to disable GPIO interrupt (%d)", err);
+                error_fatal(FATAL_GPIO_INIT);
+            }
+        }
+
+        gpio_pin_set_dt(&XSHUT_spec, 1);
+
+        LOG_INF("Schedule: outside business hours, VL53L4CD powered down");
+    }
+
+	int64_t delay_ms = MIN(ms_until_next_transition(), SCHEDULE_MAX_SLEEP_MS);
+    k_work_reschedule(&schedule_work, K_MSEC(delay_ms));
+}
+
+static void time_changed_cb(void){
+	k_work_reschedule(&schedule_work, K_NO_WAIT);
 }
 
 /* Main thread*/
@@ -864,6 +1033,11 @@ int main(void)
 	int err = error_service_init(&err_led);
 	if (err) {
 		for (;;) { }
+	}
+
+	err = time_service_init(time_changed_cb);
+	if (err) {
+		error_fatal(FATAL_GPIO_INIT);
 	}
 
 	err = gpio_pin_configure_dt(&XSHUT_spec, GPIO_PULL_UP | GPIO_OUTPUT_INACTIVE);
@@ -896,11 +1070,9 @@ int main(void)
 
 	k_work_schedule(&i2c_check_work, K_MINUTES(20));
 
+	k_work_schedule(&schedule_work, K_NO_WAIT);
+
     LOG_DBG("Successful init");
-
-	k_sleep(K_SECONDS(30));
-
-	i2c22_scan();
 
 	k_sleep(K_FOREVER);
 }

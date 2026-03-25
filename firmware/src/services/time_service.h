@@ -3,6 +3,8 @@
 
 #include <zephyr/types.h>
 
+typedef void (*time_changed_cb_t)(void);
+
 
 /** @brief Sets the base time for the system.
  * @param current_unix_time_ms The current time in Unix epoch format (milliseconds)
@@ -15,4 +17,13 @@ void set_real_time(int64_t current_unix_time_ms);
  */
 int64_t get_current_timestamp(void);
 
+/** @brief Checks if the time has been set.
+ * @return true if the time has been set, false otherwise
+ */
+bool is_time_set(void);
+
+int time_service_init(time_changed_cb_t cb);
+/** @brief Initialises the time service callback.
+ * @return 0 on success
+ */
 #endif
