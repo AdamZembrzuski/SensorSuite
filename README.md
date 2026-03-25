@@ -39,10 +39,10 @@ The included example firmware detects when people pass through a doorway into a 
 - Clone the repository to a path that contains no spaces at any point (eg *"/user/Sensor Suite/repo"* disallowed)
 - Select open application in NRF Connect and navigate to the *"firmware"* subfolder.
 - Create a build configuration <br>
-  - Set target to "nrf54l15dk/nrf54l15/ns"
-  - Set base board overlay as "boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay"
-  - Set KConfig file to "prj.conf"
-  - Select build optimisation as required
+  - Set target to "nrf54l15dk/nrf54l15/cpuapp/ns"
+  - Set base configuration to "prj.conf"
+  - Set base devicetree overlay to "boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay"
+  - Select build optimisation as desired
 - Press "Generate and build"
 
 ### Flashing Process
