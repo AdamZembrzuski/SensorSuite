@@ -19,7 +19,7 @@ AZSensorSuite is a data-acquistion hardware platform that can be user programmed
 It integrates a VL53L4CD ToF sensor from ST Microelectronics that can be used for ULP presence detection (as low as 55uA at 2V8) or for normal ranging. This is implemented alongside the Sensirion SHT30, an ambient condtion sensor that takes temperature and humidity readings.<br><br>
 
 > [!TIP]
-> The VL53L4CD and SHT30 are both members of pin-compatible sensor families and hence can be replaced in the event of a shortage or for specific project requirements.
+> The VL53L4CD and SHT30 are both members of pin-compatible sensor families and hence can be replaced in the event of specific project requirements or shortages.
 <br>
 
 The sensors are accompanied by the Nordic NRF54L15 implemented via the U-Blox Nora B206 module enabling BLE 6.0, Matter, Thread, Zigbee or other (proprietary) 2.4GHz communication. The entire system is ultra low power (400uA @ 2V8 in human detection example) and is powered from a common CR2032 coin cell.<br><br>
