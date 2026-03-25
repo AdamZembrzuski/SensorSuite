@@ -1,57 +1,61 @@
-# **AZ SensorSuite**<br>
-Copyright © 2026 Adam Zembrzuski
+# AZ SensorSuite
 
-_Licensed under the TAPR Open Hardware License (www.tapr.org/OHL)_<br>
-_A full copy of the TAPR Open Hardware License is available in license.txt_
+[![License: TAPR-OHL](https://img.shields.io/badge/License-TAPR%20OHL-blue.svg)](https://web.tapr.org/TAPR_Open_Hardware_License_v1.0.txt)
 
-> [!WARNING]  
-> The device has been mostly tested however it is always possible problems arise. Expect changes and report inaccuracies.
+> [!WARNING]
+> This device has been mostly tested, however, it is always possible problems may arise. Expect changes and please report any inaccuracies or issues.
 
-<p>
+<p align="center">
 <img src="https://github.com/user-attachments/assets/5fea7b3b-b6b0-46b0-865e-5f31d0864868" width="49%"/>
 <img src="https://github.com/user-attachments/assets/20d9fef6-5b72-4377-a723-6875384e79e8" width="49%"/>
 </p>
 
+## Overview
 
-## MANIFEST
-AZSensorSuite is a data-acquistion hardware platform that can be user programmed for a variety of applications. 
+AZ SensorSuite is an ultra-low-power, data-acquisition hardware platform designed to be user-programmed for a variety of applications. 
 
-It integrates a VL53L4CD ToF sensor from ST Microelectronics that can be used for ULP presence detection (as low as 55uA at 2V8) or for normal ranging. This is implemented alongside the Sensirion SHT30, an ambient condtion sensor that takes temperature and humidity readings.<br><br>
+The included example firmware detects when people pass through a doorway into a closed space. A machine learning model (run on a host computer) can then predict when the space is empty so that services like heating or lighting can be automatically disabled.
+
+**Interactive Viewer:** View the PCB and schematic entirely in your browser on [KiCanvas](https://kicanvas.org/?repo=https%3A%2F%2Fgithub.com%2FAZT-GH%2FSensorSuite%2Ftree%2Fmain%2Fhardware).
+
+### Hardware Features
+
+* **MCU / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4GHz communication.
+* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 55uA at 2.8V) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html))
+* **Environmental Sensor:** Sensirion SHT30 for ambient temperature and humidity readings.
+* **Power:** Powered by a CR2032 coin cell, converted to 2.8V. The entire system is ultra-low power (e.g., ~400uA in the human detection example).
 
 > [!TIP]
-> The VL53L4CD and SHT30 are both members of pin-compatible sensor families and hence can be replaced in the event of specific project requirements or shortages.
-<br>
+> The VL53L4CD and SHT30 are both members of pin-compatible sensor families. They can easily be replaced to meet specific project requirements or to navigate supply chain shortages.
 
-The sensors are accompanied by the Nordic NRF54L15 implemented via the U-Blox Nora B206 module enabling BLE 6.0, Matter, Thread, Zigbee or other (proprietary) 2.4GHz communication. The entire system is ultra low power (400uA @ 2V8 in human detection example) and is powered from a common CR2032 coin cell.<br><br>
+## Example Quickstart Guide
 
-The included example firmware detects when people pass through a doorway into a closed space. Later a machine learning model (ran on a computer) predicts when the space is empty so that services (e.g. heating or lighting) can be disabled.
-
-## EXAMPLE QUICKSTART GUIDE
 ### Requirements
-- NRF54L15DK (highly reccomended) or other SWD debugger
-- SensorSuite V1.02 PCB and TC2030-IDC-NL<br>
-  **OR**<br>
-  NRF54L15DK with sensor breakouts 
-- NRF SDK v3.1.1 via NRF Connect for VSCode
-- Python 3 (At least 3.07)
+* NRF54L15DK (highly recommended) or another SWD debugger.
+* SensorSuite V1.02 PCB and TC2030-IDC-NL cable.
+    * *Alternatively:* NRF54L15DK with sensor breakouts.
+* [nRF Connect SDK v3.1.1](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html) via nRF Connect for VS Code.
+* Python 3.7 or higher.
 
 ### Build Process
-- Clone the repository to a path that contains no spaces at any point (eg *"/user/Sensor Suite/repo"* disallowed)
-- Select open application in NRF Connect and navigate to the *"firmware"* subfolder.
-- Create a build configuration <br>
-  - Set target to "nrf54l15dk/nrf54l15/cpuapp/ns"
-  - Set base configuration to "prj.conf"
-  - Set base devicetree overlay to "boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay"
-  - Select build optimisation as desired
-- Press "Generate and build"
+1.  Clone the repository to a path that contains **no spaces** (e.g., `C:/projects/sensor_suite` is good; `C:/User/Sensor Suite/repo` will cause build errors).
+2.  Open the application in nRF Connect and navigate to the `firmware` subfolder.
+3.  Create a new build configuration:
+    * **Target:** `nrf54l15dk/nrf54l15/cpuapp/ns`
+    * **Base configuration:** `prj.conf`
+    * **Base devicetree overlay:** `boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay`
+    * Select your desired build optimization.
+4.  Click **Generate and build**.
 
 ### Flashing Process
-If flashing the DK skip step 1
+*(Note: If you are flashing the Development Kit directly, skip step 1).*
 
-- Connect TC2030-IDC-NL to the DK, the DK will automatically detect it and change target to your connected PCB.
-- Press flash and erase. If a module is being flashed for the first time, it may have protections enabled. Follow the advice in the vscode pop-up.
-##
-View the PCB and schematic entirely in your browser on [KiCanvas](https://kicanvas.org/?repo=https%3A%2F%2Fgithub.com%2FAZT-GH%2FSensorSuite%2Ftree%2Fmain%2Fhardware)
+1.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
+2.  Press **Flash and Erase**. (You may flash normally after the first flash)
+    * *Note: If a module is being flashed for the first time, it may have NVM protections enabled. Follow the advice in the VS Code pop-up to unlock it.*
 
+## License
 
+Copyright © 2026 Adam Zembrzuski. 
 
+This project is licensed under the TAPR Open Hardware License ([www.tapr.org/OHL](https://www.tapr.org/OHL)). A full copy of the license is available in the `license.txt` file in this repository.
