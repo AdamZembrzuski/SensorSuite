@@ -3,7 +3,7 @@
 [![License: TAPR-OHL](https://img.shields.io/badge/License-TAPR%20OHL-blue.svg)](https://web.tapr.org/TAPR_Open_Hardware_License_v1.0.txt)
 
 > [!WARNING]
-> This device has been mostly tested, however, it is always possible problems may arise. Expect changes and please report any inaccuracies or issues.
+> This device has been mostly tested, however, problems may arise. Expect changes and please report any inaccuracies or issues.
 
 <p align="center">
 <img src="https://github.com/user-attachments/assets/5fea7b3b-b6b0-46b0-865e-5f31d0864868" width="49%"/>
@@ -20,10 +20,10 @@ The included example firmware detects when people pass through a doorway into a 
 
 ### Hardware Features
 
-* **MCU / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4GHz communication.
-* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 55uA at 2.8V) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html))
+* **SoC / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4GHz communication.
+* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 55µA at 2.8V) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html)).
 * **Environmental Sensor:** Sensirion SHT30 for ambient temperature and humidity readings.
-* **Power:** Powered by a CR2032 coin cell, converted to 2.8V. The entire system is ultra-low power (e.g., ~400uA in the human detection example).
+* **Power:** Powered by a CR2032 coin cell, converted to 2.8V. The entire system is ultra-low power (e.g., ~400µA in the human detection example).
 
 > [!TIP]
 > The VL53L4CD and SHT30 are both members of pin-compatible sensor families. They can easily be replaced to meet specific project requirements or to navigate supply chain shortages.
@@ -37,25 +37,24 @@ The included example firmware detects when people pass through a doorway into a 
 * [nRF Connect SDK v3.1.1](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html) via nRF Connect for VS Code.
 * Python 3.7 or higher.
 
-### Build Process
-1.  Clone the repository to a path that contains **no spaces** (e.g., `C:/projects/sensor_suite` is good; `C:/User/Sensor Suite/repo` will cause build errors).
+### Build and Flash Process
+1.  Clone the repository to a path that contains **no spaces** (e.g., `/projects/sensor_suite` is good; `/projects/sensor suite/` will cause build errors).
 2.  Open the application in nRF Connect and navigate to the `firmware` subfolder.
 3.  Create a new build configuration:
     * **Target:** `nrf54l15dk/nrf54l15/cpuapp/ns`
     * **Base configuration:** `prj.conf`
     * **Base devicetree overlay:** `boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay`
     * Select your desired build optimization.
-4.  Click **Generate and build**.
-
-### Flashing Process
-*(Note: If you are flashing the Development Kit directly, skip step 1).*
-
-1.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
-2.  Press **Flash and Erase**. (You may flash normally after the first flash)
-    * *Note: If a module is being flashed for the first time, it may have NVM protections enabled. Follow the advice in the VS Code pop-up to unlock it.*
+4.  Click **Generate and Build**.
+* If flashing the Development Kit directly, skip step 5.
+5.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
+6.  Press **Flash and Erase**. (You may flash without erase after the first flash)
+* If a module is being flashed for the first time, it may have NVM protections enabled. In this event, follow the advice in the VS Code pop-up to unlock it.
 
 ## License
 
 Copyright © 2026 Adam Zembrzuski. 
 
-This project is licensed under the TAPR Open Hardware License ([www.tapr.org/OHL](https://www.tapr.org/OHL)). A full copy of the license is available in the `license.txt` file in this repository.
+This project is licensed under the TAPR Open Hardware License ([www.tapr.org/OHL](https://www.tapr.org/OHL)).
+
+A full copy of the license is available in the `license.txt` file in this repository.
