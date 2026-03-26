@@ -6,8 +6,9 @@
 > This device has been mostly tested, however, problems may arise. Expect changes and please report any inaccuracies or issues.
 
 <p align="center">
-<img src="https://github.com/user-attachments/assets/5fea7b3b-b6b0-46b0-865e-5f31d0864868" width="49%"/>
-<img src="https://github.com/user-attachments/assets/20d9fef6-5b72-4377-a723-6875384e79e8" width="49%"/>
+<img src="https://github.com/user-attachments/assets/e3bb601d-f842-4c31-8429-fb05b8374129" width="49%"/>
+
+<img src="https://github.com/user-attachments/assets/b183e1d4-eeb2-43bc-8ddf-3659e6f9d441" width="49%"/>
 </p>
 
 ## Overview
@@ -32,7 +33,7 @@ The included example firmware detects when people pass through a doorway into a 
 
 ### Requirements
 * NRF54L15DK (highly recommended) or another SWD debugger.
-* SensorSuite V1.02 PCB and TC2030-IDC-NL cable.
+* SensorSuite PCB and TC2030-IDC-NL cable.
     * *Alternatively:* NRF54L15DK with sensor breakouts.
 * [nRF Connect SDK v3.1.1](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html) via nRF Connect for VS Code.
 * Python 3.7 or higher.
