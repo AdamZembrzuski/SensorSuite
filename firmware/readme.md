@@ -50,8 +50,8 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 | Active Period 08-18 | `0x31` |  0 on success |
 | Active Period 09-21 | `0x32` |  0 on success |
 | Active Period 00-24 | `0x33` | 0 on success |
-| Active Weekend | `0x34` | 0 on success |
-| Inactive Weekend | `0x35` | 0 on success |
+| Inactive Weekend | `0x34` | 0 on success |
+| Active Weekend | `0x35` | 0 on success |
 
 ### Data Collection
 The device only collects logs if it is within the active period, definable via the 0x3- commands. The device defaults to 24/7 operation on reset.
