@@ -33,8 +33,7 @@ laser-cut for cleaner paste release on the LGA pads of the Nora B206.
 
 ### Schematic Notes
 
-- **R11** is present in the schematic but does not exist on the PCB. It is planned 
-  as a shunt resistor for current measurement.
+- **R11** should be replaced to a suitable value for current measurement instead of 0 ohms.
 - Several components are marked DNP. These are intended for development boards only 
   and should be omitted on production boards.
 
