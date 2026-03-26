@@ -46,7 +46,7 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 | Download Start | `0x10` | 0 on success |
 | Download Stop | `0x11` | 0 on success |
 | Firmware Version | `0x20` | FW Version as int (eg `12` for V1.2)|
-| Active Period 08-17 | `0x30` |  0 on success |
+| Active Period 08-16 | `0x30` |  0 on success |
 | Active Period 08-18 | `0x31` |  0 on success |
 | Active Period 09-21 | `0x32` |  0 on success |
 | Active Period 00-24 | `0x33` | 0 on success |
