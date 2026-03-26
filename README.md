@@ -21,7 +21,7 @@ The included example firmware detects when people pass through a doorway into a 
 ### Hardware Features
 
 * **SoC / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4GHz communication.
-* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 55µA at 2.8V) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html)).
+* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 154µW) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html)).
 * **Environmental Sensor:** Sensirion SHT30 for ambient temperature and humidity readings.
 * **Power:** Powered by a CR2032 coin cell, converted to 2.8V. The entire system is ultra-low power (e.g., ~400µA in the human detection example).
 
