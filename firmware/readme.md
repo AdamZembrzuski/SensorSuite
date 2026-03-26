@@ -54,12 +54,13 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 | Active Weekend | `0x35` | 0 on success |
 
 ### Data Collection
-The device only collects logs if it is within the active period, definable via the 0x3- commands. The device defaults to 24/7 operation on reset.
+The device only collects timestamp logs if it is within the active period, definable via the 0x3- commands. The device defaults to 24/7 operation on reset.
 
 Ambient logs are collected regardless of the system state (if they are enabled).
 
 ### Logging
 
+*Logging in this section is independent of sensor logging*
 RTT logging is enabled by default. Connect via the nRF Connect for Desktop 
 terminal or a J-Link RTT Viewer.
 
