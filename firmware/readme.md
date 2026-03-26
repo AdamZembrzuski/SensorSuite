@@ -60,7 +60,8 @@ Ambient logs are collected regardless of the system state (if they are enabled).
 
 ### Logging
 
-*Logging in this section is independent of sensor logging*<br>
+*Logging in this section is independent of sensor logging*
+
 RTT logging is enabled by default. Connect via the nRF Connect for Desktop 
 terminal or a J-Link RTT Viewer.
 
