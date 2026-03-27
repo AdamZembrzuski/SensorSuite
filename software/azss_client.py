@@ -62,7 +62,7 @@ BT_COMMAND_UUID       = "229a0008-ad33-4a06-9bce-c34201743655"
 # Scan / connect defaults
 # ---------------------------------------------------------------------------
 
-DEFAULT_SCAN_TIMEOUT_S      = 6.0
+DEFAULT_SCAN_TIMEOUT_S      = 15
 DEFAULT_CONNECT_TIMEOUT_S   = 15
 DEFAULT_CONNECT_RETRIES     = 3
 DEFAULT_POST_CONNECT_SETTLE_S = 0.5
@@ -283,7 +283,6 @@ class AzssBleSession:
         self,
         address: str,
         *,
-        pair: bool = True,
         retries: int = DEFAULT_CONNECT_RETRIES,
         connect_timeout_s: float = DEFAULT_CONNECT_TIMEOUT_S,
         scan_timeout_s: float = DEFAULT_SCAN_TIMEOUT_S,
@@ -320,7 +319,7 @@ class AzssBleSession:
                 client = BleakClient(
                     device,
                     disconnected_callback=on_disconnect,
-                    pair=pair,
+                    pair=False,
                     timeout=connect_timeout_s,
                 )
 
@@ -335,6 +334,9 @@ class AzssBleSession:
                 await asyncio.sleep(settle_s)
                 if not client.is_connected:
                     raise RuntimeError("Disconnected during post-connect settle period.")
+
+                info("Pairing...")
+                await client.pair(protection_level=2)
                 return True
 
             except Exception as e:
