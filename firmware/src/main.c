@@ -42,6 +42,8 @@
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
+#define SECURITY_DELAY_MS (1 * 1000)
+
 /* Sensor definitions */
 #define DETECTION_INTERVAL 240 // in ms (must end in 0, eg 80, 120, 500, NOT 143)
 #define CONSEC_ADVERTISING_START 9600 // in ms (must be a multiple of DETECTION_INTERVAL)
@@ -88,7 +90,6 @@ static void ambient_work_handler(struct k_work *work);
 static void i2c_check_work_handler(struct k_work *work);
 
 /* BLE variables */
-static bool bt_ready = false;
 
 static struct bt_le_ext_adv_start_param start_param = {
     .timeout = 4500, // 45 seconds (4500 * 10ms)
@@ -97,12 +98,13 @@ static struct bt_le_ext_adv_start_param start_param = {
 
 static struct bt_le_ext_adv *adv_set;
 
-static bool is_advertising = false;
+static atomic_t is_advertising = ATOMIC_INIT(0);
 
 K_WORK_DEFINE(adv_work, adv_work_handler);
 K_WORK_DELAYABLE_DEFINE(bt_off_work, bt_off_work_handler);
 K_WORK_DELAYABLE_DEFINE(security_work, security_work_handler);
 
+K_MUTEX_DEFINE(conn_mutex);
 struct bt_conn *conn = NULL;
 
 static const struct bt_data ad[] = {
@@ -114,6 +116,18 @@ static const struct bt_data sd[] = {
         BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_SERVICE_UUID_VAL),
 };
 
+static struct interval_data {
+    uint16_t min_ms;
+    uint16_t max_ms;
+    uint16_t latency;
+    uint16_t timeout_ms;
+} conn_intervals[] = {
+    [CMND_CONN_INTERVAL_20ms] = { 15, 25, 0, 16000 },
+    [CMND_CONN_INTERVAL_100ms] = { 90, 110, 0, 16000 },
+    [CMND_CONN_INTERVAL_512ms] = { 500, 524, 0, 16000 },
+    [CMND_CONN_INTERVAL_1024ms] = { 1000, 1024, 0, 30000 },
+};
+
 
 /* VL53L4CD variables */
 static struct gpio_callback cb;
@@ -123,6 +137,7 @@ static int64_t carry_ms = 0;
 static void counter_state_reset(void);
 
 K_WORK_DELAYABLE_DEFINE(counter_work, counter_work_handler);
+static struct k_work_sync counter_work_sync;
 
 static const struct device *const i2c_dev_22 = DEVICE_DT_GET(DT_NODELABEL(i2c22));
 
@@ -131,13 +146,14 @@ K_WORK_DEFINE(vl53_stop_work, vl53_stop_work_handler);
 /* SHT30 variables */
 static const struct device *const sht30_dev = DEVICE_DT_GET(DT_NODELABEL(sht30));
 
-static volatile bool ambient_paused = false;
+static atomic_t ambient_paused = ATOMIC_INIT(0);
 
-static int32_t  last_temp_cdeg  = 0;   /* °C * 100 */
-static uint32_t last_humid_cpct = 0;   /* %RH * 100 */
+static volatile int32_t  last_temp_cdeg  = 0;   /* °C * 100 */
+static volatile uint32_t last_humid_cpct = 0;   /* %RH * 100 */
 
 
 K_WORK_DELAYABLE_DEFINE(ambient_work, ambient_work_handler);
+static struct k_work_sync ambient_work_sync;
 
 
 /* Generic sensing variables */
@@ -145,6 +161,9 @@ K_WORK_DELAYABLE_DEFINE(ambient_work, ambient_work_handler);
 static K_MUTEX_DEFINE(i2c22_mutex);
 
 K_WORK_DELAYABLE_DEFINE(i2c_check_work, i2c_check_work_handler);
+
+K_THREAD_STACK_DEFINE(sensor_wq_stack, 2048);
+static struct k_work_q sensor_wq;
 
 
 /* GPIO variables */
@@ -175,7 +194,7 @@ static int64_t last_event_unix = 0;
 static int64_t delta_unix_ms = 0;
 static uint32_t delta_unix_sec = 0;
 
-static volatile bool logging_paused = false;
+static atomic_t logging_paused = ATOMIC_INIT(0);
 
 LOG_MODULE_REGISTER(azss, LOG_LEVEL_DBG);
 
@@ -198,16 +217,26 @@ static const struct {
 	[SCHEDULE_DISABLED] = { 0,  24 },
 };
 
-static schedule_preset_t active_schedule = SCHEDULE_DISABLED;
-static bool              weekends_disabled = false;
-
-static bool              vl53_sched_off = false;
 
 static void schedule_work_handler(struct k_work *work);
 static void vl53_sched_reinit_work_handler(struct k_work *work);
 
 K_WORK_DELAYABLE_DEFINE(schedule_work,          schedule_work_handler);
 K_WORK_DELAYABLE_DEFINE(vl53_sched_reinit_work, vl53_sched_reinit_work_handler);
+
+struct schedule_state {
+    schedule_preset_t active_schedule;
+    bool weekends_disabled;
+    bool vl53_sched_off;
+};
+
+static struct schedule_state sched = {
+    .active_schedule = SCHEDULE_DISABLED,
+    .weekends_disabled = false,
+    .vl53_sched_off = false,
+};
+
+K_MUTEX_DEFINE(schedule_mutex);
 
 /* FUNCTIONS */
 
@@ -240,7 +269,7 @@ static void adv_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	if (is_advertising) {
+	if (atomic_get(&is_advertising)) {
 		return;
 	}
 
@@ -255,7 +284,7 @@ static void adv_work_handler(struct k_work *work)
 		error_fatal(FATAL_BT_INIT);
 	}
 
-	is_advertising = true;
+	atomic_set(&is_advertising,  true);
 }
 
 /* Security work handler */
@@ -263,12 +292,22 @@ static void security_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
+    int err = -1;
+
 	if (!conn) {
-		LOG_DBG("no conn");
+		LOG_ERR("no conn");
 		return;
 	}
 
-	int err = bt_conn_set_security(conn, BT_SECURITY_L2);
+    struct bt_conn_info info;
+    bt_conn_get_info(conn, &info);
+
+	if (info.security.level < BT_SECURITY_L2) {
+        err = bt_conn_set_security(conn, BT_SECURITY_L2);
+        LOG_DBG("Manual security request: %d", err);
+    } else {
+        LOG_DBG("Security level sufficient: %d", info.security.level);
+    }
 	LOG_DBG("bt_conn_set_security returned %d", err);
 }
 
@@ -310,7 +349,7 @@ static void ambient_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    if (ambient_paused) {
+    if (atomic_get(&ambient_paused)) {
         return;
     }
 
@@ -352,7 +391,7 @@ static void ambient_work_handler(struct k_work *work)
     }
 
 reschedule:
-    k_work_schedule(&ambient_work, K_MSEC(AMBIENT_PERIOD_MS));
+    k_work_schedule_for_queue(&sensor_wq, &ambient_work, K_MSEC(AMBIENT_PERIOD_MS));
 }
 
 /* Callback functions for sense service */
@@ -371,63 +410,91 @@ static uint32_t main_humid_cb(void)
 }
 
 static uint8_t main_cmnd_cb(uint8_t command){
-        switch (command){
-                case CMND_CONN_INTERVAL_20ms:
-                        return request_conn_interval_ms(conn, 15, 25, 0, 16000) ? 1 : 0;
-                
-                case CMND_CONN_INTERVAL_100ms:
-                        return request_conn_interval_ms(conn, 90, 110, 0, 16000) ? 1 : 0;
+    switch (command){
 
-                case CMND_CONN_INTERVAL_512ms:
-                        return request_conn_interval_ms(conn, 500, 524, 0, 16000) ? 1 : 0;
+    case CMND_CONN_INTERVAL_20ms:
+    case CMND_CONN_INTERVAL_100ms:
+    case CMND_CONN_INTERVAL_512ms:
+    case CMND_CONN_INTERVAL_1024ms:{
+        int ret = 1;
+        k_mutex_lock(&conn_mutex, K_FOREVER);
+        if(conn){
+            struct bt_conn *conn_ref = bt_conn_ref(conn);
+            k_mutex_unlock(&conn_mutex);
+            struct interval_data data = conn_intervals[command];
+            ret = request_conn_interval_ms(
+                conn_ref,
+                data.min_ms,
+                data.max_ms,
+                data.latency,
+                data.timeout_ms
+            ) == 0 ? 0 : 1;
+            bt_conn_unref(conn_ref);
+        }
+        else{
+            k_mutex_unlock(&conn_mutex);
+        }
+        return ret;
 
-                case CMND_CONN_INTERVAL_1024ms:
-                        return request_conn_interval_ms(conn, 1000, 1024, 0, 30000) ? 1 : 0;
+        }   
 
-                case CMND_STREAM_START:
-                        bulk_stream_start();
-                        return 0;
+    case CMND_STREAM_START:
+            bulk_stream_start();
+            return 0;
 
-                case CMND_STREAM_STOP:
-                        bulk_stream_stop();
-                        return 0;
+    case CMND_STREAM_STOP:
+            bulk_stream_stop();
+            return 0;
 
-                case CMND_FW_VER:
-                        return FW_VERSION;
+    case CMND_FW_VER:
+            return FW_VERSION;
 
-				case CMND_SCHEDULE_8_16:
-					active_schedule = SCHEDULE_8_16;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_8_16:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.active_schedule = SCHEDULE_8_16;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-				case CMND_SCHEDULE_8_18:
-					active_schedule = SCHEDULE_8_18;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_8_18:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.active_schedule = SCHEDULE_8_18;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-				case CMND_SCHEDULE_9_21:
-					active_schedule = SCHEDULE_9_21;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_9_21:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.active_schedule = SCHEDULE_9_21;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-				case CMND_SCHEDULE_DISABLED:
-					active_schedule = SCHEDULE_DISABLED;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_DISABLED:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.active_schedule = SCHEDULE_DISABLED;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-				case CMND_SCHEDULE_WKND_DISABLE:
-					weekends_disabled = true;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_WKND_DISABLE:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.weekends_disabled = true;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-				case CMND_SCHEDULE_WKND_ENABLE:
-					weekends_disabled = false;
-					k_work_reschedule(&schedule_work, K_NO_WAIT);
-					return 0;
+    case CMND_SCHEDULE_WKND_ENABLE:
+        k_mutex_lock(&schedule_mutex, K_FOREVER);
+        sched.weekends_disabled = false;
+        k_mutex_unlock(&schedule_mutex);
+        k_work_reschedule(&schedule_work, K_NO_WAIT);
+        return 0;
 
-                default:
-                        return 1;
-                }
+    default:
+            return 1;
+
+    }
 }
 
 static struct sense_cb sense_callbacks = {
@@ -444,7 +511,7 @@ static void adv_sent_cb(struct bt_le_ext_adv *adv, struct bt_le_ext_adv_sent_inf
     ARG_UNUSED(adv);
     ARG_UNUSED(info);
     
-    is_advertising = false;
+    atomic_set(&is_advertising,  false);
     k_work_schedule(&bt_off_work, K_MSEC(100));
 }
 
@@ -474,61 +541,27 @@ static int advertising_set_init(void)
 }
 
 
-/* Bluetooth initialisation */
-static int bt_init_single(void)
+
+static bool is_ble_connected(void)
 {
-	int err;
-
-	if (bt_ready) {
-		return 0;
-	}
-
-	err = bt_enable(NULL);
-	if (err) {
-		LOG_ERR("bt_enable failed: %d", err);
-		error_fatal(FATAL_BT_INIT);
-	}
-
-	err = sense_service_init(&sense_callbacks);
-	if (err) {
-		LOG_ERR("sense_service_init failed: %d", err);
-		error_fatal(FATAL_BT_INIT);
-	}
-
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		err = settings_load();
-		if (err) {
-			LOG_ERR("settings_load failed: %d", err);
-			error_fatal(FATAL_BT_INIT);
-		}
-	}
-
-	err = advertising_set_init();
-	if (err) {
-		LOG_ERR("advertising_set_init failed: %d", err);
-		error_fatal(FATAL_BT_INIT);
-	}
-
-	bt_ready = true;
-	return 0;
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    bool connected = (conn != NULL);
+    k_mutex_unlock(&conn_mutex);
+    return connected;
 }
-
 
 /* Advertising start helper */
 static void advertising_start(void)
 {
 
-        if (is_advertising || conn != NULL) {
+        if (atomic_get(&is_advertising) || is_ble_connected()) {
                 return;
         }
 
         k_work_cancel_delayable(&bt_off_work);
 
-        (void)bt_init_single();
-
         k_work_submit(&adv_work);
 }
-
 
 /* Connection callbacks */
 static void on_connected(struct bt_conn *conn_c, uint8_t err)
@@ -539,33 +572,35 @@ static void on_connected(struct bt_conn *conn_c, uint8_t err)
 
 	k_work_cancel_delayable(&bt_off_work);
 
-	struct bt_conn *newc = bt_conn_ref(conn_c);
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+	
 	if (conn) {
 		bt_conn_unref(conn);
 	}
+	conn = bt_conn_ref(conn_c);
+	
+	k_mutex_unlock(&conn_mutex);
+	atomic_set(&is_advertising,  false);
 
-	conn = newc;
-
-	is_advertising = false;
-
-	int err_cfg = gpio_pin_interrupt_configure_dt(&GPIO1_spec, GPIO_PULL_UP | GPIO_INT_DISABLE);
+	int err_cfg = gpio_pin_interrupt_configure_dt(&GPIO1_spec, GPIO_INT_DISABLE);
 	if (err_cfg) {
 		LOG_ERR("Failed to disable GPIO interrupt (%d)", err_cfg);
 		error_fatal(FATAL_GPIO_INIT);
 	}
 
-	k_work_cancel_delayable(&counter_work);
-	k_work_cancel_delayable(&ambient_work);
+	k_work_cancel_delayable_sync(&counter_work, &counter_work_sync);
+	k_work_cancel_delayable_sync(&ambient_work, &ambient_work_sync);
 
 	counter_state_reset();
 
-	logging_paused = true;
-	ambient_paused = true;
+	atomic_set(&logging_paused,  true);
+	atomic_set(&ambient_paused,  true);
 
-	if (!vl53_sched_off) {
-		k_work_submit(&vl53_stop_work);
+	if (!sched.vl53_sched_off) {
+		k_work_submit_to_queue(&sensor_wq, &vl53_stop_work);
 	}
-	//k_work_reschedule(&security_work, K_MSEC(2000)); OBSOLETE - client handles security
+
+	/**_work_reschedule(&security_work, K_MSEC(SECURITY_DELAY_MS)); Deprecated*/
 }
 
 static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
@@ -575,19 +610,21 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 	bulk_stream_stop();
 	k_work_cancel_delayable(&security_work);
 
+    k_mutex_lock(&conn_mutex, K_FOREVER);
 	if (conn) {
 		bt_conn_unref(conn);
 		conn = NULL;
 	}
+	k_mutex_unlock(&conn_mutex);
 
-	LOG_INF("Disconnected, reason 0x%02X", reason);
+	LOG_DBG("Disconnected, reason 0x%02X", reason);
 
-	if (!vl53_sched_off){
-		logging_paused = false;
-		k_work_reschedule(&vl53_sched_reinit_work, K_MSEC(10));
+	if (!sched.vl53_sched_off){
+		atomic_set(&logging_paused,  false);
+		k_work_reschedule_for_queue(&sensor_wq, &vl53_sched_reinit_work, K_MSEC(10));
 	}
-	ambient_paused = false;
-	k_work_reschedule(&ambient_work, K_NO_WAIT);
+	atomic_set(&ambient_paused,  false);
+	k_work_reschedule_for_queue(&sensor_wq, &ambient_work, K_NO_WAIT);
 	k_work_schedule(&bt_off_work, K_MSEC(100));
 }
 
@@ -608,24 +645,15 @@ static void bt_off_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    if (conn != NULL || is_advertising) {
+    if (is_ble_connected() || atomic_get(&is_advertising)) {
         return;
     }
 
     if (adv_set) {
         (void)bt_le_ext_adv_stop(adv_set);
-        //(void)bt_le_ext_adv_delete(adv_set);
-        //adv_set = NULL;
     }
-
-    //int err = bt_disable();
-    //if (err) {
-    //    LOG_WRN("bt_disable failed: %d", err);
-    //    return;
-    //}
-
-    //bt_ready = false;     
-    is_advertising = false;
+   
+    atomic_set(&is_advertising,  false);
     LOG_DBG("Advertising disabled");
 }
 
@@ -647,7 +675,7 @@ static int GPIO1_cb_init(void)
     int err = gpio_pin_configure_dt(&GPIO1_spec, GPIO_PULL_UP | GPIO_INPUT);
     //int err = gpio_pin_configure_dt(&GPIO1_spec, GPIO_INPUT);
     if(err){
-        LOG_DBG("int1 input init failed (%d)",err);
+        LOG_ERR("GPIO1 input init failed (%d)",err);
         return -1;
     }
 
@@ -655,7 +683,7 @@ static int GPIO1_cb_init(void)
 
     err = gpio_pin_interrupt_configure_dt(&GPIO1_spec, GPIO_INT_EDGE_TO_ACTIVE);
     if(err){
-        LOG_DBG("int1 interrupt init failed (%d)",err);
+        LOG_ERR("GPIO1 interrupt init failed (%d)",err);
         return -2;
     }
 
@@ -664,7 +692,7 @@ static int GPIO1_cb_init(void)
     gpio_init_callback(&cb, GPIO1_cb,BIT(GPIO1_spec.pin));
     err = gpio_add_callback(GPIO1_spec.port,&cb);
     if(err){
-        LOG_DBG("Failed to add int1 callback (%d)",err);
+        LOG_ERR("Failed to add GPIO1 callback (%d)",err);
         return -3;
     }
     return 0;
@@ -753,7 +781,7 @@ cleanup:
 /* Counter work handler */
 static void counter_work_handler(struct k_work *work)
 {
-	if (logging_paused) {
+	if (atomic_get(&logging_paused)) {
 		return;
 	}
 
@@ -819,8 +847,8 @@ static void counter_work_handler(struct k_work *work)
 	}
 
 	else if (consec_detect >= CONSEC_ADVERTISING_START / DETECTION_INTERVAL   
-		&& !is_advertising
-		&& conn == NULL) {
+		&& !atomic_get(&is_advertising)
+		&& !is_ble_connected()) {
 	
 			advertising_start();
 
@@ -863,8 +891,8 @@ static void i2c_check_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	if (vl53_sched_off) {
-        k_work_reschedule(&i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
+	if (sched.vl53_sched_off) {
+        k_work_reschedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
         return;
     }
 
@@ -883,7 +911,7 @@ static void i2c_check_work_handler(struct k_work *work)
 	pm_i2c22_put_or_fatal();
 	k_mutex_unlock(&i2c22_mutex);
 
-	k_work_reschedule(&i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
+	k_work_reschedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
 
 }
 
@@ -892,21 +920,29 @@ static void i2c_check_work_handler(struct k_work *work)
     for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
         int err = i2c_write(i2c_dev_22, NULL, 0, addr);
         if (err == 0) {
-            LOG_INF("I2C ACK at 0x%02X", addr);
+            LOG_DBG("I2C ACK at 0x%02X", addr);
         }
     }
 }*/
 
+
 static bool is_business_hours(void)
 {
+    if (!is_time_set()) {
+        return true;
+    }
 
-	if (!is_time_set()) {
-		return true;
-	}
+    schedule_preset_t active;
+    bool weekend_active;
+
+    k_mutex_lock(&schedule_mutex, K_FOREVER);
+    active   = sched.active_schedule;
+    weekend_active = sched.weekends_disabled;
+    k_mutex_unlock(&schedule_mutex);
 
     int64_t unix_sec = get_current_timestamp() / 1000;
 
-    if (weekends_disabled) {
+    if (weekend_active) {
         /* Unix epoch (Jan 1 1970) was a Thursday = day 4.
          * 0 = Sunday, 6 = Saturday.                        */
         uint8_t dow = (uint8_t)(((unix_sec / 86400) + 4) % 7);
@@ -918,8 +954,8 @@ static bool is_business_hours(void)
     uint32_t sec_in_day = (uint32_t)(unix_sec % 86400);
     uint8_t  hour       = (uint8_t)(sec_in_day / 3600);
 
-    return (hour >= schedule_hours[active_schedule].start_h &&
-            hour <  schedule_hours[active_schedule].end_h);
+    return (hour >= schedule_hours[active].start_h &&
+            hour <  schedule_hours[active].end_h);
 }
 
 static int64_t ms_until_next_transition(void)
@@ -928,11 +964,17 @@ static int64_t ms_until_next_transition(void)
         return 60 * 1000;
     }
 
+    schedule_preset_t active;
+
+    k_mutex_lock(&schedule_mutex, K_FOREVER);
+    active = sched.active_schedule;
+    k_mutex_unlock(&schedule_mutex);
+
     int64_t unix_sec   = get_current_timestamp() / 1000;
     int64_t sec_in_day = unix_sec % 86400;
 
-    int64_t start_sec = (int64_t)schedule_hours[active_schedule].start_h * 3600;
-    int64_t end_sec   = (int64_t)schedule_hours[active_schedule].end_h   * 3600;
+    int64_t start_sec = (int64_t)schedule_hours[active].start_h * 3600;
+    int64_t end_sec   = (int64_t)schedule_hours[active].end_h   * 3600;
 
     int64_t day_base = unix_sec - sec_in_day;
     int64_t next_sec;
@@ -959,54 +1001,67 @@ static void vl53_sched_reinit_work_handler(struct k_work *work)
 	int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
 												GPIO_INT_EDGE_TO_ACTIVE);
 	if (err) {
-		LOG_ERR("Schedule: failed to re-enable GPIO interrupt (%d)", err);
+		LOG_ERR("Failed to re-enable GPIO interrupt (%d)", err);
 		error_fatal(FATAL_GPIO_INIT);
 	}
 
-    LOG_INF("Schedule: VL53L4CD re-initialised");
+    LOG_DBG("VL53L4CD re-initialised");
 }
 
 static void schedule_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    bool    should_be_active = is_business_hours();
+    bool should_be_active = is_business_hours();
+    bool currently_off;
+    schedule_preset_t active;
 
-	if (should_be_active && vl53_sched_off) {
-		vl53_sched_off = false;
-		gpio_pin_set_dt(&XSHUT_spec, 0);
+    k_mutex_lock(&schedule_mutex, K_FOREVER);
+    currently_off = sched.vl53_sched_off;
+    active = sched.active_schedule;
 
-		if (conn == NULL) {
-			logging_paused = false;
-			k_work_reschedule(&vl53_sched_reinit_work, K_MSEC(10));
-			k_work_reschedule(&ambient_work, K_NO_WAIT);
-		}
+    if (should_be_active && currently_off) {
+        sched.vl53_sched_off = false;
+        k_mutex_unlock(&schedule_mutex);
 
-        LOG_INF("Schedule: entering business hours (%02d:00–%02d:00)",
-                schedule_hours[active_schedule].start_h,
-                schedule_hours[active_schedule].end_h);
+        gpio_pin_set_dt(&XSHUT_spec, 0);
 
-    } else if (!should_be_active && !vl53_sched_off) {
-        vl53_sched_off = true;
-        logging_paused = true;
+        if (!is_ble_connected()) {
+            atomic_set(&logging_paused, false);
+            k_work_reschedule_for_queue(&sensor_wq, &vl53_sched_reinit_work, K_MSEC(10));
+            k_work_reschedule_for_queue(&sensor_wq, &ambient_work, K_NO_WAIT);
+        }
+
+        LOG_DBG("Entering business hours (%02d:00–%02d:00)",
+                schedule_hours[active].start_h,
+                schedule_hours[active].end_h);
+
+    } else if (!should_be_active && !currently_off) {
+        sched.vl53_sched_off = true;
+        k_mutex_unlock(&schedule_mutex);
+
+        atomic_set(&logging_paused, true);
 
         k_work_cancel_delayable(&counter_work);
 
-        if (conn == NULL) {
+        if (!is_ble_connected()) {
             int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
-                                                      GPIO_PULL_UP | GPIO_INT_DISABLE);
+                                                      GPIO_INT_DISABLE);
             if (err) {
-                LOG_ERR("Schedule: failed to disable GPIO interrupt (%d)", err);
+                LOG_ERR("Failed to disable GPIO interrupt (%d)", err);
                 error_fatal(FATAL_GPIO_INIT);
             }
         }
 
         gpio_pin_set_dt(&XSHUT_spec, 1);
 
-        LOG_INF("Schedule: outside business hours, VL53L4CD powered down");
+        LOG_DBG("Outside business hours, VL53L4CD powered down");
+
+    } else {
+        k_mutex_unlock(&schedule_mutex);
     }
 
-	int64_t delay_ms = MIN(ms_until_next_transition(), SCHEDULE_MAX_SLEEP_MS);
+    int64_t delay_ms = MIN(ms_until_next_transition(), SCHEDULE_MAX_SLEEP_MS);
     k_work_reschedule(&schedule_work, K_MSEC(delay_ms));
 }
 
@@ -1040,7 +1095,38 @@ int main(void)
 		error_fatal(FATAL_GPIO_INIT);
 	}
 
-	err = gpio_pin_configure_dt(&XSHUT_spec, GPIO_PULL_UP | GPIO_OUTPUT_INACTIVE);
+	err = bt_conn_cb_register(&connection_callbacks);
+	if (err) {
+		error_fatal(FATAL_BT_INIT);
+	}
+
+    err = bt_enable(NULL);
+	if (err) {
+		LOG_ERR("bt_enable failed: %d", err);
+		error_fatal(FATAL_BT_INIT);
+	}
+
+	err = sense_service_init(&sense_callbacks);
+	if (err) {
+		LOG_ERR("sense_service_init failed: %d", err);
+		error_fatal(FATAL_BT_INIT);
+	}
+
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		err = settings_load();
+		if (err) {
+			LOG_ERR("settings_load failed: %d", err);
+			error_fatal(FATAL_BT_INIT);
+		}
+	}
+
+	err = advertising_set_init();
+	if (err) {
+		LOG_ERR("advertising_set_init failed: %d", err);
+		error_fatal(FATAL_BT_INIT);
+	}
+
+    err = gpio_pin_configure_dt(&XSHUT_spec, GPIO_PULL_UP | GPIO_OUTPUT_INACTIVE);
 	if (err) {
         error_fatal(FATAL_VL53_INIT);
 	}
@@ -1052,25 +1138,24 @@ int main(void)
 		error_fatal(FATAL_VL53_INIT);
 	}
 
-	bulk_stream_init();
-
     VL53L4CD_user_init();
 
 	if (GPIO1_cb_init()) {
 		error_fatal(FATAL_GPIO_INIT);
 	}
 
-	err = bt_conn_cb_register(&connection_callbacks);
-	if (err) {
-		error_fatal(FATAL_BT_INIT);
-	}
+    bulk_stream_init();
 
+    k_work_queue_init(&sensor_wq);
+    k_work_queue_start(&sensor_wq, sensor_wq_stack,
+                    K_THREAD_STACK_SIZEOF(sensor_wq_stack),
+                    K_PRIO_PREEMPT(10), NULL);
 
-	k_work_schedule(&ambient_work, K_NO_WAIT);
+    k_work_schedule(&schedule_work, K_NO_WAIT);
 
-	k_work_schedule(&i2c_check_work, K_MINUTES(20));
+	k_work_schedule_for_queue(&sensor_wq, &ambient_work, K_MINUTES(1));
 
-	k_work_schedule(&schedule_work, K_NO_WAIT);
+	k_work_schedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(20));
 
     LOG_DBG("Successful init");
 
