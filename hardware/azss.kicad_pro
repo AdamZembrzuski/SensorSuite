@@ -500,7 +500,7 @@
       "gencad": "",
       "idf": "",
       "netlist": "",
-      "plot": "DXF/f_courtyard/",
+      "plot": "./GERBERS_1-10",
       "pos_files": "",
       "specctra_dsn": "",
       "step": "azss.step",
