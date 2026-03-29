@@ -15,7 +15,7 @@ For build and flash instructions, see the
 | VL53L4CD ToF ranging | Complete |
 | SHT30 temperature / humidity | Complete |
 | BLE service | Complete |
-| NVM storage | Planned |
+| NVM storage | In development |
 | Firmware over the air | Planned |
 | Mesh Networking | Planned |
 
