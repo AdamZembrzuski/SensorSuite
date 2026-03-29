@@ -288,7 +288,7 @@ static void adv_work_handler(struct k_work *work)
 }
 
 /* Security work handler */
-static void security_work_handler(struct k_work *work)
+/* static void security_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
@@ -309,19 +309,8 @@ static void security_work_handler(struct k_work *work)
         LOG_DBG("Security level sufficient: %d", info.security.level);
     }
 	LOG_DBG("bt_conn_set_security returned %d", err);
-}
+} */
 
-/* Raw value to useful data conversions*/
-
-/*uint16_t dummy_raw_data(void){
-        static uint16_t i = 0;
-        i++;
-        i = (uint16_t)(i ? i : 1);
-        i ^= (uint16_t)(i << 7);
-        i ^= (uint16_t)(i >> 9);
-        i ^= (uint16_t)(i << 8);
-        return i;
-}*/
 
 /* Error throwing PMs */
 
