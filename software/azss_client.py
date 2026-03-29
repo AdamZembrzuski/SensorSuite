@@ -895,7 +895,7 @@ async def main() -> None:
     print(AZSS_ART)
     print(
         """
-v0.10 © 2026 Adam Zembrzuski.
+v1.00 © 2026 Adam Zembrzuski.
 
 Licensed under the TAPR Open Hardware License (OHL).
 This software and associated design files may be used, modified,
