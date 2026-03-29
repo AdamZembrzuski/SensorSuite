@@ -35,7 +35,7 @@
 
 
 /* Misc definitions */
-#define FW_VERSION 3 //Major release 0, minor release 3
+#define FW_VERSION 10 //Major release 1, minor release 0
 
 
 /* BLE definitions */
