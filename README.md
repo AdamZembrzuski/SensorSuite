@@ -6,9 +6,8 @@
 > This device has been mostly tested, however, problems may arise. Expect changes and please report any inaccuracies or issues.
 
 
-<img width="1723" height="923" alt="azss2tobanner" src="https://github.com/user-attachments/assets/2148e225-81ab-4ad9-9439-c6f7d335ee92" />
-
 ## Overview
+<img width="1920" height="1080" alt="land_export" src="https://github.com/user-attachments/assets/4e11e4e2-a3a2-4446-b661-37c5dac60c5e" />
 
 AZ SensorSuite is an ultra-low-power, data-acquisition hardware platform designed to be user-programmed for a variety of applications. 
 
