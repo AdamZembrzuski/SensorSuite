@@ -5,11 +5,8 @@
 > [!WARNING]
 > This device has been mostly tested, however, problems may arise. Expect changes and please report any inaccuracies or issues.
 
-<p align="center">
-<img src="https://github.com/user-attachments/assets/e3bb601d-f842-4c31-8429-fb05b8374129" width="49%"/>
 
-<img src="https://github.com/user-attachments/assets/b183e1d4-eeb2-43bc-8ddf-3659e6f9d441" width="49%"/>
-</p>
+<img width="1723" height="923" alt="azss2tobanner" src="https://github.com/user-attachments/assets/2148e225-81ab-4ad9-9439-c6f7d335ee92" />
 
 ## Overview
 
