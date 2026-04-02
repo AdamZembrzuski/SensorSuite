@@ -10,7 +10,7 @@ The PCB is four layers, based on the [OshPark](https://docs.oshpark.com/services
 four-layer stackup. A different stackup may be used if preferable, as only two GPIO traces 
 require controlled impedance.
 
-OshPark is recommended for fabrication as they offer the most affordable 2µ" ENIG finish. 
+OshPark is recommended for fabrication as they offer the most affordable 2µ" ENIG finish for small orders.
 If ordering elsewhere, the minimum required specs are:
 
 | Parameter | Value |
