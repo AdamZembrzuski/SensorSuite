@@ -39,6 +39,7 @@ The included example firmware detects when people pass through a doorway into a 
 * Python 3.7 or higher.
 
 ### Build and Flash Process
+* If working with the development kit, skip step 5 and in `firmware/src/main.c` set `err_led.pin = 10` on line 171.
 1.  Clone the repository to a path that contains **no spaces** (e.g., `/projects/sensor_suite` is good; `/projects/sensor suite/` will cause build errors).
 2.  Open the application in nRF Connect and navigate to the `firmware` subfolder.
 3.  Create a new build configuration:
@@ -47,7 +48,6 @@ The included example firmware detects when people pass through a doorway into a 
     * **Base devicetree overlay:** `boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay`
     * Select your desired build optimization.
 4.  Click **Generate and Build**.
-* If flashing the Development Kit directly, skip step 5.
 5.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
 6.  Press **Flash and Erase**. (You may flash without erase after the first flash)
 * If a module is being flashed for the first time, it may have NVM protections enabled. In the event of this, follow the advice in the VS Code pop-up to unlock it.
