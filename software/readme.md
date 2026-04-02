@@ -70,7 +70,7 @@ Data is written to the `csvs/` folder, created automatically if it does not exis
 | `cumulative_i64` | Cumulative elapsed seconds since base timestamp |
 | `real_i64` | Absolute Unix timestamp in seconds |
 
-**`ambient.csv`** — Temperature and humidity log (sampled every 15 seconds)
+**`ambient.csv`** — Temperature and humidity log (sampled every 15 minutes)
 
 | Column | Description |
 |---|---|
