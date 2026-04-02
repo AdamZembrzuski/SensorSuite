@@ -37,21 +37,23 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 
 ### 'Command' Commands
 
-| Command | Hex | Return |
-|---|---|---|
-| Connection Interval 20ms | `0x00` | 0 on success |
-| Connection Interval 100ms | `0x01` | 0 on success |
-| Connection Interval 512ms | `0x02` | 0 on success |
-| Connection Interval 1024ms | `0x03` | 0 on success |
-| Download Start | `0x10` | 0 on success |
-| Download Stop | `0x11` | 0 on success |
-| Firmware Version | `0x20` | FW Version as int (eg `12` for V1.2)|
-| Active Period 08-16 | `0x30` |  0 on success |
-| Active Period 08-18 | `0x31` |  0 on success |
-| Active Period 09-21 | `0x32` |  0 on success |
-| Active Period 00-24 | `0x33` | 0 on success |
-| Inactive Weekend | `0x34` | 0 on success |
-| Active Weekend | `0x35` | 0 on success |
+| Command | Hex | Return | Description |
+|---|---|---|---|
+| Connection Interval 20ms | `0x00` | 0 on success | Sets new connection interval |
+| Connection Interval 100ms | `0x01` | 0 on success | Sets new connection interval |
+| Connection Interval 512ms | `0x02` | 0 on success | Sets new connection interval |
+| Connection Interval 1024ms | `0x03` | 0 on success | Sets new connection interval |
+| Download Start | `0x10` | 0 on success | Starts timestamp download notifications |
+| Download Stop | `0x11` | 0 on success | Stops timestamp download notifications |
+| Firmware Version | `0x20` |int (eg `12` for V1.2)| Returns FW Version |
+| Active Period 08-16 | `0x30` |  0 on success | Sets the device to only detect <sup>¶</sup> between 08:00 and 16:00 |
+| Active Period 08-18 | `0x31` |  0 on success | Sets the device to only detect between 08:00 and 18:00 |
+| Active Period 09-21 | `0x32` |  0 on success | Sets the device to only detect between 09:00 and 21:00 |
+| Active Period 00-24 | `0x33` | 0 on success | Sets the device to detect irrespective of time (not date) |
+| Inactive Weekend | `0x34` | 0 on success | Sets the device to not detect during the weekend |
+| Active Weekend | `0x35` | 0 on success | Sets the device to detect during the weekend |
+
+*¶ Detect refers to human/object detection, ambient detection is still carried out*
 
 ### Data Collection
 The device only collects timestamp logs if it is within the active period, definable via the 0x3- commands. The device defaults to 24/7 operation on reset.
