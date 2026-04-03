@@ -39,10 +39,10 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 
 | Command | Hex | Return | Description |
 |---|---|---|---|
-| Connection Interval 20ms | `0x00` | 0 on success | Sets new connection interval |
-| Connection Interval 100ms | `0x01` | 0 on success | Sets new connection interval |
-| Connection Interval 512ms | `0x02` | 0 on success | Sets new connection interval |
-| Connection Interval 1024ms | `0x03` | 0 on success | Sets new connection interval |
+| Connection Interval 20ms | `0x00` | none | Sets new connection interval |
+| Connection Interval 100ms | `0x01` | none | Sets new connection interval |
+| Connection Interval 512ms | `0x02` | none | Sets new connection interval |
+| Connection Interval 1024ms | `0x03` | none | Sets new connection interval |
 | Download Start | `0x10` | 0 on success | Starts timestamp download notifications |
 | Download Stop | `0x11` | 0 on success | Stops timestamp download notifications |
 | Firmware Version | `0x20` |int (eg `12` for V1.2)| Returns FW Version |

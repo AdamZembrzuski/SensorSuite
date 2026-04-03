@@ -42,7 +42,9 @@
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
-#define SECURITY_DELAY_MS (1 * 1000)
+#define SECURITY_DELAY_MS 300
+
+#define ADV_TIMEOUT 45*100 // 45 seconds
 
 /* Sensor definitions */
 #define DETECTION_INTERVAL 240 // in ms (must end in 0, eg 80, 120, 500, NOT 143)
@@ -83,7 +85,7 @@
 
 static void adv_work_handler(struct k_work *work);
 static void bt_off_work_handler(struct k_work *work);
-static void security_work_handler(struct k_work *work);
+static void update_interval_work_handler(struct k_work *work);
 static void counter_work_handler(struct k_work *work);
 static void vl53_stop_work_handler(struct k_work *work);
 static void ambient_work_handler(struct k_work *work);
@@ -92,9 +94,11 @@ static void i2c_check_work_handler(struct k_work *work);
 /* BLE variables */
 
 static struct bt_le_ext_adv_start_param start_param = {
-    .timeout = 4500, // 45 seconds (4500 * 10ms)
+    .timeout = 2*60*100, // 2 Minutes advertising initially
     .num_events = 0, // Advertise until timeout
 };
+
+static bool adv_param_set = 0;
 
 static struct bt_le_ext_adv *adv_set;
 
@@ -102,7 +106,7 @@ static atomic_t is_advertising = ATOMIC_INIT(0);
 
 K_WORK_DEFINE(adv_work, adv_work_handler);
 K_WORK_DELAYABLE_DEFINE(bt_off_work, bt_off_work_handler);
-K_WORK_DELAYABLE_DEFINE(security_work, security_work_handler);
+K_WORK_DELAYABLE_DEFINE(update_interval_work, update_interval_work_handler);
 
 K_MUTEX_DEFINE(conn_mutex);
 struct bt_conn *conn = NULL;
@@ -122,11 +126,13 @@ static struct interval_data {
     uint16_t latency;
     uint16_t timeout_ms;
 } conn_intervals[] = {
-    [CMND_CONN_INTERVAL_20ms] = { 15, 25, 0, 16000 },
-    [CMND_CONN_INTERVAL_100ms] = { 90, 110, 0, 16000 },
-    [CMND_CONN_INTERVAL_512ms] = { 500, 524, 0, 16000 },
-    [CMND_CONN_INTERVAL_1024ms] = { 1000, 1024, 0, 30000 },
+    [CMND_CONN_INTERVAL_20ms] = { 15, 25, 0, 4096 },
+    [CMND_CONN_INTERVAL_100ms] = { 90, 110, 0, 4096 },
+    [CMND_CONN_INTERVAL_512ms] = { 500, 524, 0, 4096 },
+    [CMND_CONN_INTERVAL_1024ms] = { 1000, 1024, 0, 8192 },
 };
+
+static uint8_t pending_interval_cmnd;
 
 
 /* VL53L4CD variables */
@@ -250,7 +256,6 @@ static int request_conn_interval_ms(struct bt_conn *conn, uint16_t min_ms, uint1
         return -ENOTCONN;
     }
 
-    // Convert ms to 1.25ms units
     param.interval_min = (min_ms * 4) / 5;
     param.interval_max = (max_ms * 4) / 5;
     
@@ -286,30 +291,6 @@ static void adv_work_handler(struct k_work *work)
 
 	atomic_set(&is_advertising,  true);
 }
-
-/* Security work handler */
-/* static void security_work_handler(struct k_work *work)
-{
-	ARG_UNUSED(work);
-
-    int err = -1;
-
-	if (!conn) {
-		LOG_ERR("no conn");
-		return;
-	}
-
-    struct bt_conn_info info;
-    bt_conn_get_info(conn, &info);
-
-	if (info.security.level < BT_SECURITY_L2) {
-        err = bt_conn_set_security(conn, BT_SECURITY_L2);
-        LOG_DBG("Manual security request: %d", err);
-    } else {
-        LOG_DBG("Security level sufficient: %d", info.security.level);
-    }
-	LOG_DBG("bt_conn_set_security returned %d", err);
-} */
 
 
 /* Error throwing PMs */
@@ -398,6 +379,34 @@ static uint32_t main_humid_cb(void)
     return (uint32_t)CLAMP(last_humid_cpct / 100, 0U, 100U);
 }
 
+static void update_interval_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    if(conn){
+        struct bt_conn *conn_ref = bt_conn_ref(conn);
+        k_mutex_unlock(&conn_mutex);
+        struct interval_data data = conn_intervals[pending_interval_cmnd];
+        int err = request_conn_interval_ms(
+            conn_ref,
+            data.min_ms,
+            data.max_ms,
+            data.latency,
+            data.timeout_ms
+        );
+        bt_conn_unref(conn_ref);
+        if (err) {
+            LOG_ERR("Failed to update connection interval: %d", err);
+        }
+
+    }
+    else{
+        k_mutex_unlock(&conn_mutex);
+    }
+    return;
+}
+
 static uint8_t main_cmnd_cb(uint8_t command){
     switch (command){
 
@@ -405,27 +414,11 @@ static uint8_t main_cmnd_cb(uint8_t command){
     case CMND_CONN_INTERVAL_100ms:
     case CMND_CONN_INTERVAL_512ms:
     case CMND_CONN_INTERVAL_1024ms:{
-        int ret = 1;
-        k_mutex_lock(&conn_mutex, K_FOREVER);
-        if(conn){
-            struct bt_conn *conn_ref = bt_conn_ref(conn);
-            k_mutex_unlock(&conn_mutex);
-            struct interval_data data = conn_intervals[command];
-            ret = request_conn_interval_ms(
-                conn_ref,
-                data.min_ms,
-                data.max_ms,
-                data.latency,
-                data.timeout_ms
-            ) == 0 ? 0 : 1;
-            bt_conn_unref(conn_ref);
-        }
-        else{
-            k_mutex_unlock(&conn_mutex);
-        }
-        return ret;
+        pending_interval_cmnd = command;
+        k_work_schedule(&update_interval_work, K_MSEC(SECURITY_DELAY_MS));
+        return 0;
 
-        }   
+    }   
 
     case CMND_STREAM_START:
             bulk_stream_start();
@@ -501,6 +494,10 @@ static void adv_sent_cb(struct bt_le_ext_adv *adv, struct bt_le_ext_adv_sent_inf
     ARG_UNUSED(info);
     
     atomic_set(&is_advertising,  false);
+    if (!adv_param_set){
+        start_param.timeout = ADV_TIMEOUT;
+        adv_param_set = true;
+    }
     k_work_schedule(&bt_off_work, K_MSEC(100));
 }
 
@@ -589,7 +586,6 @@ static void on_connected(struct bt_conn *conn_c, uint8_t err)
 		k_work_submit_to_queue(&sensor_wq, &vl53_stop_work);
 	}
 
-	/**_work_reschedule(&security_work, K_MSEC(SECURITY_DELAY_MS)); Deprecated*/
 }
 
 static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
@@ -597,7 +593,6 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 	ARG_UNUSED(conn_dc);
 
 	bulk_stream_stop();
-	k_work_cancel_delayable(&security_work);
 
     k_mutex_lock(&conn_mutex, K_FOREVER);
 	if (conn) {
@@ -617,6 +612,15 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 	k_work_schedule(&bt_off_work, K_MSEC(100));
 }
 
+static void security_changed(struct bt_conn *conn_s, bt_security_t level,
+                              enum bt_security_err err)
+{
+    if (err == BT_SECURITY_ERR_AUTH_FAIL) {
+        LOG_WRN("Auth failed — clearing stale bond");
+        bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn_s));
+    }
+}
+
 /*static void recycled_cb(void)
 {
         advertising_start();
@@ -626,6 +630,7 @@ static struct bt_conn_cb connection_callbacks = {
         .connected = on_connected,
         .disconnected = on_disconnected,
         //.recycled         = recycled_cb,
+        .security_changed = security_changed,
 };
 
 
@@ -1145,6 +1150,8 @@ int main(void)
 	k_work_schedule_for_queue(&sensor_wq, &ambient_work, K_MINUTES(1));
 
 	k_work_schedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(20));
+
+    advertising_start();
 
     LOG_DBG("Successful init");
 

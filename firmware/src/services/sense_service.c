@@ -188,10 +188,10 @@ BT_GATT_SERVICE_DEFINE(
 			       BT_GATT_PERM_READ, time_read_curr_cb, NULL, NULL),
 
     BT_GATT_CHARACTERISTIC(BT_BASE_TIMESTAMP_UUID, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_READ,
-			       BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ, time_read_cb, time_write_cb, &timestamp),
+			       BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ_ENCRYPT, time_read_cb, time_write_cb, &timestamp),
 
     BT_GATT_CHARACTERISTIC(BT_COMMAND_UUID, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_READ,
-                    BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ, cmnd_read_cb, cmnd_cb, &cmnd_ret),
+                    BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ_ENCRYPT, cmnd_read_cb, cmnd_cb, &cmnd_ret),
     );
 
 /* A function to register application callbacks for the  characteristics  */

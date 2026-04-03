@@ -63,7 +63,7 @@ BT_COMMAND_UUID       = "229a0008-ad33-4a06-9bce-c34201743655"
 # ---------------------------------------------------------------------------
 
 DEFAULT_SCAN_TIMEOUT_S      = 15
-DEFAULT_CONNECT_TIMEOUT_S   = 15
+DEFAULT_CONNECT_TIMEOUT_S   = 45
 DEFAULT_CONNECT_RETRIES     = 3
 DEFAULT_POST_CONNECT_SETTLE_S = 0.5
 
@@ -296,20 +296,19 @@ class AzssBleSession:
                 return True
             await self.disconnect()
 
+        device = await self.find_device(
+            address,
+            scan_timeout_s=scan_timeout_s,
+            prefer_fresh_scan=True,
+        )
+        if device is None:
+            error("Device not found during scan. Make sure the peripheral is advertising.")
+            return False
+
         exc: BaseException
         for attempt in range(1, retries + 1):
             self._disconnect_event.clear()
             try:
-                device = await self.find_device(
-                    address,
-                    scan_timeout_s=scan_timeout_s,
-                    prefer_fresh_scan=True,
-                )
-                if device is None:
-                    raise RuntimeError(
-                        "Device not found during scan. Make sure the peripheral is advertising."
-                    )
-
                 def on_disconnect(_client: BleakClient) -> None:
                     self._disconnect_event.set()
                     if not self._expect_disconnect:
@@ -319,7 +318,6 @@ class AzssBleSession:
                 client = BleakClient(
                     device,
                     disconnected_callback=on_disconnect,
-                    pair=False,
                     timeout=connect_timeout_s,
                 )
 
@@ -335,8 +333,14 @@ class AzssBleSession:
                 if not client.is_connected:
                     raise RuntimeError("Disconnected during post-connect settle period.")
 
-                info("Pairing...")
-                await client.pair(protection_level=2)
+                # Trigger BlueZ's security manager by accessing an encrypted characteristic.
+                # BlueZ handles pairing and LTK re-use automatically — no explicit pair() needed.
+                info("Securing connection...")
+                try:
+                    await self.read_char(BT_BASE_TIMESTAMP_UUID)
+                except Exception as e:
+                    raise RuntimeError(f"Failed to secure connection: {format_exc(e)}")
+
                 return True
 
             except Exception as e:
@@ -348,7 +352,6 @@ class AzssBleSession:
                         await self._client.disconnect()
                 self._client = None
                 self._device = None
-                # Exponential backoff with jitter
                 await asyncio.sleep(0.5 * (2 ** (attempt - 1)) + random.uniform(0, 0.3))
 
         error(f"Failed to connect after {retries} attempts: {format_exc(exc)}")
@@ -718,7 +721,7 @@ async def cmd_write_command(session: AzssBleSession) -> None:
         return
     try:
         await session.write_char(BT_COMMAND_UUID, bytes([command]), response=True)
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.01)
         # Single read_char with its built-in retry — no second retry loop needed.
         result_bytes = await session.read_char(BT_COMMAND_UUID)
         result = result_bytes[0]
