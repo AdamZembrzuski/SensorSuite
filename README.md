@@ -46,7 +46,10 @@ The included example firmware detects when people pass through a doorway into a 
 4.  Click **Generate and Build**.
 5.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
 6.  Press **Flash and Erase**. (You may flash without erase after the first flash)
-* If a module is being flashed for the first time, it may have NVM protections enabled. In the event of this, follow the advice in the VS Code pop-up to unlock it.
+* If a module is being flashed for the first time, it may have NVM protections enabled. Click `Yes` in the pop-up to allow recovery.
+
+<img width="462" height="150" alt="error" src="https://github.com/user-attachments/assets/c01f1521-834b-4669-94a2-276189f38c14" />
+
 
 ## License
 
