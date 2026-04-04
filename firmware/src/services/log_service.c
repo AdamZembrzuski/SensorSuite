@@ -121,7 +121,7 @@ static void bulk_sent_cb(struct bt_conn *c, void *user_data)
 	atomic_set(&bulk_in_flight, false);
 
 	if (atomic_get(&bulk_stream_active)) {
-		k_work_schedule(&bulk_stream_work, K_NO_WAIT);
+		k_work_schedule(&bulk_stream_work, K_MSEC(5));
 	}
 }
 

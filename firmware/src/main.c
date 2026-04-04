@@ -134,6 +134,7 @@ static struct interval_data {
 
 static uint8_t pending_interval_cmnd;
 
+static bool clear_bond_on_disconnect = false;
 
 /* VL53L4CD variables */
 static struct gpio_callback cb;
@@ -143,7 +144,6 @@ static int64_t carry_ms = 0;
 static void counter_state_reset(void);
 
 K_WORK_DELAYABLE_DEFINE(counter_work, counter_work_handler);
-static struct k_work_sync counter_work_sync;
 
 static const struct device *const i2c_dev_22 = DEVICE_DT_GET(DT_NODELABEL(i2c22));
 
@@ -159,7 +159,6 @@ static volatile uint32_t last_humid_cpct = 0;   /* %RH * 100 */
 
 
 K_WORK_DELAYABLE_DEFINE(ambient_work, ambient_work_handler);
-static struct k_work_sync ambient_work_sync;
 
 
 /* Generic sensing variables */
@@ -574,8 +573,8 @@ static void on_connected(struct bt_conn *conn_c, uint8_t err)
 		error_fatal(FATAL_GPIO_INIT);
 	}
 
-	k_work_cancel_delayable_sync(&counter_work, &counter_work_sync);
-	k_work_cancel_delayable_sync(&ambient_work, &ambient_work_sync);
+	k_work_cancel_delayable(&counter_work);
+	k_work_cancel_delayable(&ambient_work);
 
 	counter_state_reset();
 
@@ -601,6 +600,11 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 	}
 	k_mutex_unlock(&conn_mutex);
 
+    if (clear_bond_on_disconnect) {
+        clear_bond_on_disconnect = false;
+        bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn_dc));
+    }
+
 	LOG_DBG("Disconnected, reason 0x%02X", reason);
 
 	if (!sched.vl53_sched_off){
@@ -615,9 +619,14 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 static void security_changed(struct bt_conn *conn_s, bt_security_t level,
                               enum bt_security_err err)
 {
-    if (err == BT_SECURITY_ERR_AUTH_FAIL) {
-        LOG_WRN("Auth failed — clearing stale bond");
-        bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn_s));
+    if (err == BT_SECURITY_ERR_PIN_OR_KEY_MISSING) {
+        /* Stay connected — central will initiate fresh pairing,
+         * ALLOW_UNAUTH_OVERWRITE handles bond overwrite automatically. */
+        LOG_WRN("PIN/key missing — waiting for re-pair");
+    } else if (err == BT_SECURITY_ERR_AUTH_FAIL) {
+        LOG_WRN("Auth failed — clearing bond after disconnect");
+        clear_bond_on_disconnect = true;
+        bt_conn_disconnect(conn_s, BT_HCI_ERR_AUTH_FAIL);
     }
 }
 
@@ -633,6 +642,24 @@ static struct bt_conn_cb connection_callbacks = {
         .security_changed = security_changed,
 };
 
+static void pairing_complete(struct bt_conn *conn_p, bool bonded)
+{
+    LOG_DBG("Pairing complete, bonded: %d", bonded);
+}
+
+static void pairing_failed(struct bt_conn *conn_p, enum bt_security_err reason)
+{
+    LOG_WRN("Pairing failed, reason: %d", reason);
+}
+
+static struct bt_conn_auth_info_cb auth_info_cb = {
+    .pairing_complete = pairing_complete,
+    .pairing_failed   = pairing_failed,
+};
+
+static struct bt_conn_auth_cb auth_cb = {
+    /* All NULL = NoInputNoOutput / Level 2 */
+};
 
 /* Bluetooth disable work handler */
 static void bt_off_work_handler(struct k_work *work)
@@ -1093,6 +1120,10 @@ int main(void)
 	if (err) {
 		error_fatal(FATAL_BT_INIT);
 	}
+
+    bt_conn_auth_cb_register(&auth_cb);
+    bt_conn_auth_info_cb_register(&auth_info_cb);
+
 
     err = bt_enable(NULL);
 	if (err) {
