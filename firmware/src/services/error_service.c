@@ -7,6 +7,11 @@
 #include <zephyr/arch/exception.h>
 #include <zephyr/logging/log.h>
 
+#include <zephyr/drivers/watchdog.h>
+
+static const struct device *wdt_dev = DEVICE_DT_GET_OR_NULL(DT_ALIAS(watchdog0));
+
+
 static struct gpio_dt_spec s_err_led;
 static bool s_err_led_valid;
 static volatile fatal_code_t s_fatal_code = FATAL_KERNEL; // Volatile for debug
@@ -65,7 +70,20 @@ int error_service_init(const struct gpio_dt_spec *err_led)
 
 __attribute__((noreturn))
 void error_fatal(fatal_code_t code)
-{
+{	
+
+	if (wdt_dev && device_is_ready(wdt_dev)) {
+        wdt_disable(wdt_dev);
+    }
+
+	if (s_err_led_valid) {
+        gpio_pin_set_dt(&s_err_led, 1);
+    }
+
+	k_busy_wait(2 * 1000 * 1000); // 2 seconds
+
+
+	LOG_PANIC();
 	(void)irq_lock();
 
 	s_fatal_code = code;
@@ -74,7 +92,6 @@ void error_fatal(fatal_code_t code)
 		gpio_pin_set_dt(&s_err_led, 1);
 	}
 
-	LOG_PANIC();
 	blink_fatal_forever(code);
 }
 

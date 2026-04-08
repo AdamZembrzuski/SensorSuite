@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define RB_STAMP_SIZE   (50U * 1024U)  /* 51200 bytes */
-#define RB_AMBIENT_SIZE (5U * 1024U)  /*  5120 bytes */
+#define RB_STAMP_SIZE   (32U * 1024U)  
+#define RB_AMBIENT_SIZE (4U * 1024U)  
 
 #define BULK_HDR_LEN        4
 #define BULK_FLAG_LAST      0x01

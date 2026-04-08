@@ -14,6 +14,8 @@
 #include <zephyr/arch/exception.h>
 #include <zephyr/drivers/sensor.h>
 
+#include <zephyr/sys/reboot.h>
+
 
 /* Bluetooth includes */
 #include <zephyr/bluetooth/bluetooth.h>
@@ -52,13 +54,13 @@
 
 #define VL53_DISTANCE_THRESH_MM 910
 
-#define AMBIENT_PERIOD_MS (60 * 15 * 1000)
+#define VL53_WATCHDOG_PERIOD_MS (15 * 60 * 1000)
 
+#define AMBIENT_PERIOD_MS (15 * 60 * 1000)
 
-#define I2C_CHECK_PERIOD_MINS 30
 
 /* Schedule definitions */
-#define SCHEDULE_MAX_SLEEP_MS (3600 * 1000/2)
+#define SCHEDULE_MAX_SLEEP_MS (3600 * 1000 / 2)
 
 /* Command definitions */
 
@@ -89,7 +91,7 @@ static void update_interval_work_handler(struct k_work *work);
 static void counter_work_handler(struct k_work *work);
 static void vl53_stop_work_handler(struct k_work *work);
 static void ambient_work_handler(struct k_work *work);
-static void i2c_check_work_handler(struct k_work *work);
+static void vl53_watchdog_work_handler(struct k_work *work);
 
 /* BLE variables */
 
@@ -165,7 +167,7 @@ K_WORK_DELAYABLE_DEFINE(ambient_work, ambient_work_handler);
 
 static K_MUTEX_DEFINE(i2c22_mutex);
 
-K_WORK_DELAYABLE_DEFINE(i2c_check_work, i2c_check_work_handler);
+K_WORK_DELAYABLE_DEFINE(vl53_watchdog_work, vl53_watchdog_work_handler);
 
 K_THREAD_STACK_DEFINE(sensor_wq_stack, 2048);
 static struct k_work_q sensor_wq;
@@ -282,11 +284,15 @@ static void adv_work_handler(struct k_work *work)
 		error_fatal(FATAL_BT_INIT);
 	}
 
-	int err = bt_le_ext_adv_start(adv_set, &start_param);
-	if (err) {
-		LOG_ERR("bt_le_ext_adv_start failed: %d", err);
-		error_fatal(FATAL_BT_INIT);
-	}
+    int err = bt_le_ext_adv_start(adv_set, &start_param);
+    if (err == -ENOMEM || err == -EBUSY) {
+        LOG_WRN("bt_le_ext_adv_start busy (%d), retrying", err);
+        k_work_submit(&adv_work);
+        return;
+    } else if (err) {
+        LOG_ERR("bt_le_ext_adv_start failed: %d", err);
+        error_fatal(FATAL_BT_INIT);
+    }
 
 	atomic_set(&is_advertising,  true);
 }
@@ -908,33 +914,7 @@ static void vl53_stop_work_handler(struct k_work *work)
 }
 
 
-static void i2c_check_work_handler(struct k_work *work)
-{
-	ARG_UNUSED(work);
 
-	if (sched.vl53_sched_off) {
-        k_work_reschedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
-        return;
-    }
-
-	k_mutex_lock(&i2c22_mutex, K_FOREVER);
-	pm_i2c22_get_or_fatal();
-	uint16_t sensor_id = 0;
-
-	uint8_t status = VL53L4CD_ULP_GetSensorId((uint8_t)0, &sensor_id);
-	if (status || (sensor_id != 0xEBAA)) {
-		LOG_ERR("VL53L4CD not detected");
-		pm_i2c22_put_or_fatal();
-		k_mutex_unlock(&i2c22_mutex);
-		error_fatal(FATAL_VL53_ID);
-	}
-
-	pm_i2c22_put_or_fatal();
-	k_mutex_unlock(&i2c22_mutex);
-
-	k_work_reschedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(I2C_CHECK_PERIOD_MINS));
-
-}
 
 /*static void i2c22_scan(void)
 {
@@ -1016,17 +996,40 @@ static void vl53_sched_reinit_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    /* Re-initialise fully — XSHUT cycle resets all sensor registers. */
+    gpio_pin_set_dt(&XSHUT_spec, 1);
+    k_msleep(10);
+    gpio_pin_set_dt(&XSHUT_spec, 0);
+    k_msleep(10);
+
     VL53L4CD_user_init();
 
-	int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
-												GPIO_INT_EDGE_TO_ACTIVE);
-	if (err) {
-		LOG_ERR("Failed to re-enable GPIO interrupt (%d)", err);
-		error_fatal(FATAL_GPIO_INIT);
-	}
+    int err = gpio_pin_interrupt_configure_dt(&GPIO1_spec,
+                                              GPIO_INT_EDGE_TO_ACTIVE);
+    if (err) {
+        LOG_ERR("Failed to re-enable GPIO interrupt (%d)", err);
+        error_fatal(FATAL_GPIO_INIT);
+    }
 
     LOG_DBG("VL53L4CD re-initialised");
+}
+
+static void vl53_watchdog_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (atomic_get(&logging_paused) || sched.vl53_sched_off || is_ble_connected()) {
+        goto reschedule;
+    }
+
+    int64_t since_last = k_uptime_get() - last_detection_time;
+    if (since_last >= VL53_WATCHDOG_PERIOD_MS) {
+        LOG_WRN("VL53 watchdog: no interrupt in %lld ms, reinitialising", since_last);
+        k_work_reschedule_for_queue(&sensor_wq, &vl53_sched_reinit_work, K_NO_WAIT);
+    }
+
+reschedule:
+    k_work_reschedule_for_queue(&sensor_wq, &vl53_watchdog_work,
+                                K_MSEC(VL53_WATCHDOG_PERIOD_MS));
 }
 
 static void schedule_work_handler(struct k_work *work)
@@ -1093,23 +1096,30 @@ static void time_changed_cb(void){
 /* Main thread*/
 int main(void)
 {
-	if (!device_is_ready(err_led.port)) {
-		for (;;) { }
-	}
 
-	if (!device_is_ready(GPIO1_spec.port)) {
-		for (;;) { }
-	}
+    uint32_t reset_reason = NRF_RESET->RESETREAS;
+    NRF_RESET->RESETREAS = reset_reason; // clear it
+    LOG_INF("Reset reason: 0x%08X", reset_reason);
 
-	if (!device_is_ready(i2c_dev_22)) {
-		for (;;) { }
-	}
+    int err = 0;
 
+    if (!device_is_ready(err_led.port)) {
+        LOG_ERR("Error LED GPIO device not ready");
+        LOG_PANIC();
+        for (;;) { }
+    }
 
-	int err = error_service_init(&err_led);
-	if (err) {
-		for (;;) { }
-	}
+    err = error_service_init(&err_led);
+    if (err) {
+        LOG_ERR("Error service init failed: %d", err);
+        LOG_PANIC();
+        for (;;) { }
+    }
+
+    if (!device_is_ready(i2c_dev_22)) {
+        LOG_ERR("I2C device not ready");
+        error_fatal(FATAL_VL53_INIT);
+    }
 
 	err = time_service_init(time_changed_cb);
 	if (err) {
@@ -1121,9 +1131,14 @@ int main(void)
 		error_fatal(FATAL_BT_INIT);
 	}
 
-    bt_conn_auth_cb_register(&auth_cb);
-    bt_conn_auth_info_cb_register(&auth_info_cb);
-
+    err = bt_conn_auth_cb_register(&auth_cb);
+    if (err) {
+        error_fatal(FATAL_BT_INIT);
+    }
+    err = bt_conn_auth_info_cb_register(&auth_info_cb);
+    if (err) {
+        error_fatal(FATAL_BT_INIT);
+    }
 
     err = bt_enable(NULL);
 	if (err) {
@@ -1163,7 +1178,15 @@ int main(void)
 		error_fatal(FATAL_VL53_INIT);
 	}
 
+
+    gpio_pin_set_dt(&XSHUT_spec, 1);
+    k_msleep(10);
+    gpio_pin_set_dt(&XSHUT_spec, 0);
+    k_msleep(10);
+
+
     VL53L4CD_user_init();
+
 
 	if (GPIO1_cb_init()) {
 		error_fatal(FATAL_GPIO_INIT);
@@ -1180,7 +1203,7 @@ int main(void)
 
 	k_work_schedule_for_queue(&sensor_wq, &ambient_work, K_MINUTES(1));
 
-	k_work_schedule_for_queue(&sensor_wq, &i2c_check_work, K_MINUTES(20));
+	k_work_schedule_for_queue(&sensor_wq, &vl53_watchdog_work, K_MSEC(VL53_WATCHDOG_PERIOD_MS));
 
     advertising_start();
 
