@@ -1,0 +1,191 @@
+menu "AZSensorSuite Application Configuration"
+
+config APP_FW_VERSION
+    int "Firmware Version"
+    default 10
+    help
+      Major/minor firmware version reported via the CMND_FW_VER command.
+      Encoded as a single byte (e.g., 10 for v1.0).
+
+config APP_VL53_DETECTION_INTERVAL_MS
+    int "VL53L4CD Detection Interval (ms)"
+    default 240
+    help
+      Inter-measurement period for the VL53L4CD ToF sensor in milliseconds.
+      Must be a multiple of 10. Lower values increase detection responsiveness
+      at the cost of higher power consumption.
+
+config APP_CONSEC_ADVERTISING_START_MS
+    int "Consecutive Advertising Start (ms)"
+    default 23040
+    help
+      Total duration of consecutive detections required to trigger a
+      BLE advertising burst. Must be a multiple of APP_VL53_DETECTION_INTERVAL_MS.
+
+config APP_ADVERTISING_TIMEOUT_MS
+    int "Advertising Timeout (ms)"
+    default 45000
+    help
+      Duration of each BLE advertising window after the first. The radio
+      advertises for this period then shuts down until the next trigger.
+
+config APP_INITIAL_ADVERTISING_TIMEOUT_MS
+    int "Initial Advertising Timeout (ms)"
+    default 120000
+    help
+      Duration of the first advertising window after boot. Longer than
+      subsequent windows to allow initial connection for time sync and
+      settings write.
+
+config APP_ADVERTISE_ON_DISCONNECT
+    bool "Advertise on Disconnect"
+    default y
+    help
+      If enabled, immediately starts a new advertising window after a
+      BLE disconnection. Useful during development. May be disabled in
+      production to conserve power.
+
+config APP_VL53_DISTANCE_THRESH_MM
+    int "VL53L4CD Distance Threshold (mm)"
+    default 910
+    help
+      Distance threshold in millimetres. An interrupt is fired when a
+      target is detected closer than this value. Should be set to match
+      the mounting geometry of the sensor at the entry point.
+
+config APP_VL53_WATCHDOG_PERIOD_MS
+    int "VL53L4CD Watchdog Period (ms)"
+    default 900000
+    help
+      Period of the VL53L4CD watchdog timer. If no interrupt has been
+      received within this window the sensor is reinitialised. Also
+      used as the interval for persisting log state to RRAM.
+
+config APP_SHT_ENABLE
+    bool "Enable SHT3X Sensor"
+    default y
+    help
+      Enable the SHT30 temperature and humidity sensor. When disabled,
+      temperature and humidity characteristics always return 0 and the
+      ambient ring buffer is not used.
+
+config APP_SHT_READ_INTERVAL_MS
+    int "SHT3X Read Interval (ms)"
+    default 900000
+    depends on APP_SHT_ENABLE
+    help
+      Interval between SHT30 ambient samples in milliseconds.
+
+config APP_BOARD_IS_PROD
+    bool "Target Production PCB"
+    default y
+    help
+      If enabled, maps the error LED to GPIO1 pin 5 (production PCB).
+      If disabled, maps to GPIO1 pin 14 (devkit).
+
+config APP_SCHEDULE_MAX_SLEEP_MS
+    int "Schedule Work Maximum Sleep (ms)"
+    default 1800000
+    help
+      Caps how far ahead schedule_work reschedules itself between
+      business hour transitions. Prevents excessively long sleep
+      durations when the next transition is many hours away.
+
+config APP_STREAM_MAX_ERR
+    int "BLE Stream Maximum Consecutive Errors"
+    default 8
+    help
+      Number of consecutive non-ENOMEM errors tolerated during a bulk
+      stream before the stream is aborted. Errors are retried with
+      exponential backoff before this limit is reached.
+
+config APP_ZMS_MAX_EVICTION_ATTEMPTS
+    int "ZMS Maximum Eviction Attempts"
+    default 8
+    help
+      Maximum number of oldest-entry evictions attempted per chunk write
+      in OVERWRITE_OLDEST mode before giving up and dropping the chunk.
+      Guards against persistent zms_delete failures causing an infinite loop.
+
+choice APP_LOG_FULL_STRATEGY
+    prompt "Log Full Strategy"
+    default APP_LOG_OVERWRITE_OLDEST
+    help
+      Behaviour when ZMS stamp or ambient storage is full.
+
+config APP_LOG_OVERWRITE_OLDEST
+    bool "Overwrite Oldest"
+    help
+      Evict the oldest stored chunk to make room for incoming data.
+      Ensures the most recent data is always retained at the cost of
+      losing the oldest entries.
+
+config APP_LOG_STOP_WHEN_FULL
+    bool "Stop When Full"
+    help
+      Drop incoming chunks silently once storage is full. Retains the
+      oldest data at the cost of losing recent entries.
+
+endchoice
+
+config APP_SENSOR_WQ_STACK_SIZE
+    int "Sensor Workqueue Stack Size (bytes)"
+    default 2048
+    help
+      Stack size for the sensor workqueue which runs VL53L4CD and SHT30
+      work handlers. Increase if stack overflow is observed during sensor
+      operations.
+
+config APP_STREAM_WQ_STACK_SIZE
+    int "Stream Workqueue Stack Size (bytes)"
+    default 2048
+    help
+      Stack size for the BLE bulk stream workqueue. Kept separate from
+      the system workqueue to prevent ZMS reads from blocking BLE host
+      connection event processing.
+
+config APP_WDT_TIMEOUT_MS
+    int "Watchdog Timeout (ms)"
+    default 60000
+    help
+      Hardware watchdog timeout. If the watchdog is not fed within this
+      window the SoC resets. Must be greater than APP_WDT_FEED_INTERVAL_MS.
+
+config APP_WDT_FEED_INTERVAL_MS
+    int "Watchdog Feed Interval (ms)"
+    default 50000
+    help
+      How often the feed work checks liveness bits and feeds the watchdog.
+      Must be less than APP_WDT_TIMEOUT_MS.
+
+config APP_WDT_HEARTBEAT_INTERVAL_MS
+    int "Watchdog Heartbeat Interval (ms)"
+    default 45000
+    help
+      How often each monitored workqueue flips its liveness bit. Must be
+      less than APP_WDT_FEED_INTERVAL_MS to guarantee the bit is set before
+      each feed window.
+
+config APP_CONSEC_DETECT_FILTER
+    bool "Enable Consecutive Detection Filter"
+    default n
+    help
+      Require multiple consecutive detections before logging an event.
+      Useful in environments with higher false positive rates or where
+      the sensor is mounted further from the entry point than recommended.
+      Has no effect in typical doorframe deployments with a white matte
+      target where hardware filtering is sufficient.
+
+config APP_CONSEC_DETECT_THRESHOLD
+    int "Consecutive Detection Threshold"
+    default 2
+    depends on APP_CONSEC_DETECT_FILTER
+    help
+      Number of consecutive detections within the detection interval
+      required before an event is logged. Only active when
+      APP_CONSEC_DETECT_FILTER is enabled.
+
+endmenu
+
+# Source the main Zephyr Kconfig tree
+source "Kconfig.zephyr"

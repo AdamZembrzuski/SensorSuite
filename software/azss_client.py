@@ -39,7 +39,7 @@ class BleCmd(enum.IntEnum):
 BULK_FLAG_LAST: Final[int] = 0x01
 BULK_HDR_LEN:   Final[int] = 4
 
-AMBIENT_INTERVAL_S: Final[int] = 15
+AMBIENT_INTERVAL_S: Final[int] = 15 * 60
 
 # 315_360_000 s ≈ 10 years.  Deltas this large indicate a counter rollover
 # or a first-boot sentinel value from the firmware, not real elapsed time.
@@ -561,7 +561,7 @@ async def _bulk_stream(session: AzssBleSession):
     queue, on_notify = make_notify_queue()
     await session.write_char(BT_COMMAND_UUID, bytes([BleCmd.CONN_20MS]), response=True)
     await session.start_notify(BT_BULK_UUID, on_notify)
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.8)
     await session.write_char(BT_COMMAND_UUID, bytes([BleCmd.STREAM_START]), response=True)
     try:
         yield queue
@@ -835,9 +835,10 @@ _COMMANDS: dict[str, _Command] = {
     "read uuid":         _Command(cmd_read_uuid,         needs_connection=True),
     "read count":        _Command(cmd_read_count,        needs_connection=True,
                                   aliases=("read people", "read objects")),
-    "read temp":         _Command(cmd_read_temp,         needs_connection=True,
-                                  aliases=("read temperature",)),
-    "read humidity":     _Command(cmd_read_humidity,     needs_connection=True),
+    "read temperature":  _Command(cmd_read_temp,         needs_connection=True,
+                                  aliases=("read temp",)),
+    "read humidity":     _Command(cmd_read_humidity,     needs_connection=True,
+                                  aliases=("read rh", "read humid")),
     "read time":         _Command(cmd_read_time,         needs_connection=True),
     "write":             _Command(cmd_write_command,     needs_connection=True),
     "write time":        _Command(cmd_write_time_system, needs_connection=True,

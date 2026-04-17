@@ -3,3 +3,6 @@ venv/
 
 .csv/
 csvs
+
+hardware/~azss.kicad_pcb.lck
+hardware/~azss.kicad_pro.lck

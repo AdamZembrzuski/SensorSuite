@@ -1,0 +1,15 @@
+app:
+  address: 0x48000
+  size: 0x103000
+
+log_ambient_partition:
+  address: 0x14B000
+  size: 0x8000
+
+log_stamp_partition:
+  address: 0x153000
+  size: 0x10000
+
+settings_storage:
+  address: 0x163000
+  size: 0x2000
