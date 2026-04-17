@@ -10,25 +10,22 @@ The PCB is four layers, based on the [OshPark](https://docs.oshpark.com/services
 four-layer stackup. A different stackup may be used if preferable, as only two GPIO traces 
 require controlled impedance.
 
-OshPark is recommended for fabrication as they offer the most affordable 2µ" ENIG finish for small orders.
-If ordering elsewhere, the minimum required specs are:
-
 | Parameter | Value |
 |---|---|
 | Layers | 4 |
 | Board thickness | 1.6mm |
 | Surface finish | 2µ" ENIG (preferred) |
 | Via drill / pad | 0.3 / 0.4mm |
-| Via tenting | Tented (minimum) |
+| Via tenting | Tented minimum, plugged preferred |
 
 ### Stencil
 
-Stencils are recommended from JLCPCB. Electropolished stencils are preferred over 
+Electropolished stencils are preferred over 
 laser-cut for cleaner paste release on the LGA pads of the Nora B206.
 
 ### Assembly Notes
 
-- The U-Blox Nora B206 is an LGA component and **must be reflow soldered**. 
+- The U-Blox Nora B206 and ST VL53L4CD are LGA components and **must be reflow soldered**. 
   Hand soldering is not possible.
 
 ### Schematic Notes
@@ -38,4 +35,4 @@ laser-cut for cleaner paste release on the LGA pads of the Nora B206.
   and should be omitted on production boards.
 
 > [!TIP]
-> If the SHT3x is not required, C11 and U4 can be DNP'd.
+> If the SHT3x is not required, C11 and U4 can be DNP'd, and in the example firmware, `CONFIG_APP_SHT_ENABLE` should be set to `n`in `prj.conf`.
