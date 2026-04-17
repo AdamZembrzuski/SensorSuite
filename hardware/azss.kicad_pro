@@ -237,7 +237,7 @@
       "internal_id": "",
       "mfg": "",
       "mpn": "",
-      "sch_revision": ""
+      "sch_revision": "3"
     },
     "layer_pairs": [],
     "layer_presets": [],
@@ -697,7 +697,7 @@
       {
         "filename": "azss.kicad_sch",
         "name": "azss",
-        "uuid": "00000000-0000-0000-0000-000000000000"
+        "uuid": "2b867044-284a-4215-9ff0-1fa87deaf73c"
       }
     ],
     "used_designators": "",
@@ -706,7 +706,7 @@
   "sheets": [
     [
       "2b867044-284a-4215-9ff0-1fa87deaf73c",
-      "Root"
+      "azss"
     ]
   ],
   "text_variables": {},
