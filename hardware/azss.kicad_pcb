@@ -1265,7 +1265,7 @@
 			(size 0.825 0.25)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pinfunction "EN_1")
 			(pintype "input")
 			(uuid "1d401bd9-f7a0-40e9-a019-c402a0cbcab1")
@@ -1275,7 +1275,7 @@
 			(size 0.825 0.25)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pinfunction "SEL_2")
 			(pintype "input")
 			(uuid "290d2b44-5771-4b2c-9f9a-bd937ee7cc7c")
@@ -1355,7 +1355,7 @@
 			(size 0.825 0.25)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pinfunction "VIN_10")
 			(pintype "power_in")
 			(uuid "e77e63fa-c1a8-4403-9729-ddfc3f65948a")
@@ -2645,7 +2645,7 @@
 			(size 1.475 0.6)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pinfunction "S_2")
 			(pintype "passive")
 			(uuid "b221c142-9183-45e5-9149-5f1cffd5897b")
@@ -2655,7 +2655,7 @@
 			(size 1.475 0.6)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "/SHUNT HI")
+			(net "/SHUNT LO")
 			(pinfunction "D_3")
 			(pintype "passive")
 			(teardrops
@@ -4884,7 +4884,7 @@
 			(size 1.125 1.75)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.222222)
-			(net "/SHUNT HI")
+			(net "/SHUNT LO")
 			(pintype "passive")
 			(uuid "f6804542-1bff-410d-9f54-799a2e333bb1")
 		)
@@ -5332,7 +5332,7 @@
 			(size 0.8 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(D4-A)")
+			(net "Net-(D1-A)")
 			(pintype "passive")
 			(uuid "4a876c40-7818-4333-a2f2-883640482124")
 		)
@@ -5553,7 +5553,7 @@
 			(size 0.56 0.62)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pintype "passive")
 			(uuid "3d8caffb-1d7d-4ea8-b598-a6e543b29ddc")
 		)
@@ -6436,7 +6436,7 @@
 		(at 197.1375 84.4625 -90)
 		(descr "LED SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: http://www.tortai-tech.com/upload/download/2011102023233369053.pdf), generated with kicad-footprint-generator")
 		(tags "LED")
-		(property "Reference" "D4"
+		(property "Reference" "D1"
 			(at 0 -1.43 90)
 			(layer "F.SilkS")
 			(hide yes)
@@ -6652,7 +6652,6 @@
 			(size 0.875 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(D4-A)")
 			(pinfunction "A_2")
 			(pintype "passive")
 			(uuid "db37dfcb-979e-426e-83fe-22e4b0a9f11a")
@@ -7185,7 +7184,7 @@
 			(size 0.9 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pintype "passive")
 			(uuid "5c61dd2b-5874-4dc0-b351-a90be771a517")
 		)
@@ -7578,7 +7577,7 @@
 			(size 0.8 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "Net-(Q1-S)")
+			(net "/SMPS_VIN")
 			(pintype "passive")
 			(uuid "810b6c6f-10c1-4ba4-99d7-1f70e2f4cd77")
 		)
@@ -8333,7 +8332,7 @@
 		)
 		(fill yes)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "6955908d-09d3-44c5-8bc3-d14b17b89368")
 	)
 	(gr_circle
@@ -16738,7 +16737,7 @@
 		(end 197.1375 86.6375)
 		(width 0.8)
 		(layer "F.Cu")
-		(net "Net-(D4-A)")
+		(net "Net-(D1-A)")
 		(uuid "20791b6c-094d-41db-a4f8-d4275cf08730")
 	)
 	(segment
@@ -16746,7 +16745,7 @@
 		(end 197.1175 86.6575)
 		(width 0.8)
 		(layer "F.Cu")
-		(net "Net-(D4-A)")
+		(net "Net-(D1-A)")
 		(uuid "f2dcc3a9-e2fa-40cf-b193-943595d7f142")
 	)
 	(segment
@@ -16754,7 +16753,7 @@
 		(end 199.025 104.075)
 		(width 0.6)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "45037e57-0c4a-4105-be7e-3050b9531696")
 	)
 	(segment
@@ -16762,7 +16761,7 @@
 		(end 199.45 103.65)
 		(width 0.6)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "812b17b1-20d3-43d0-950b-cf9a96b4fa64")
 	)
 	(segment
@@ -16770,7 +16769,7 @@
 		(end 198.08 104.0775)
 		(width 0.6)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "9b682754-226c-45c5-b3e4-e11921326340")
 	)
 	(segment
@@ -16778,7 +16777,7 @@
 		(end 198.0825 104.075)
 		(width 0.6)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "a7ce587d-0596-452d-803d-4be200476931")
 	)
 	(segment
@@ -16786,7 +16785,7 @@
 		(end 200.674999 103.65)
 		(width 0.6)
 		(layer "F.Cu")
-		(net "/SHUNT HI")
+		(net "/SHUNT LO")
 		(uuid "c59fe67e-0c6a-454b-b590-85164b636012")
 	)
 	(zone
@@ -16846,46 +16845,6 @@
 		(polygon
 			(pts
 				(xy 203.82 104.17) (xy 203.82 104.73) (xy 203.87 104.73) (xy 203.95 104.49) (xy 203.9 104.31)
-			)
-		)
-	)
-	(zone
-		(net "/ERROR_OUT")
-		(layer "F.Cu")
-		(hatch none 0.1)
-		(priority 30004)
-		(attr
-			(teardrop
-				(type padvia)
-			)
-		)
-		(connect_pads yes
-			(clearance 0)
-		)
-		(min_thickness 0.0254)
-		(fill yes
-			(island_removal_mode 1)
-		)
-		(polygon
-			(pts
-				(xy 196.437829 88.3) (xy 196.362636 88.295231) (xy 196.303967 88.28185) (xy 196.221736 88.236793)
-				(xy 196.168351 88.187998) (xy 196.088402 88.117175) (xy 196.034174 88.081628) (xy 195.964805 88.047836)
-				(xy 195.849 88.325) (xy 195.889158 88.622433) (xy 196.066741 88.583408) (xy 196.141696 88.555651)
-				(xy 196.259713 88.516741) (xy 196.336679 88.504539) (xy 196.437829 88.5)
-			)
-		)
-		(filled_polygon
-			(layer "F.Cu")
-			(pts
-				(xy 195.975334 88.052985) (xy 195.975927 88.053254) (xy 196.033505 88.081302) (xy 196.034795 88.082035)
-				(xy 196.087691 88.116709) (xy 196.089035 88.117736) (xy 196.168269 88.187925) (xy 196.168383 88.188028)
-				(xy 196.221736 88.236793) (xy 196.303967 88.28185) (xy 196.362636 88.295231) (xy 196.426871 88.299305)
-				(xy 196.434909 88.303248) (xy 196.437829 88.310981) (xy 196.437829 88.488813) (xy 196.434402 88.497086)
-				(xy 196.426654 88.500501) (xy 196.356835 88.503634) (xy 196.336679 88.504539) (xy 196.259718 88.51674)
-				(xy 196.259715 88.51674) (xy 196.259713 88.516741) (xy 196.141696 88.555651) (xy 196.141693 88.555652)
-				(xy 196.067497 88.583127) (xy 196.065945 88.583582) (xy 195.901564 88.619706) (xy 195.892748 88.618135)
-				(xy 195.887626 88.61079) (xy 195.887458 88.609844) (xy 195.849424 88.328143) (xy 195.850222 88.322074)
-				(xy 195.960028 88.059268) (xy 195.966379 88.052958)
 			)
 		)
 	)
@@ -17035,7 +16994,6 @@
 		)
 	)
 	(zone
-		(net "/SHUNT HI")
 		(layer "F.Cu")
 		(uuid "9500b71f-e051-4fc9-8cfa-6da0a1b59605")
 		(hatch edge 0.5)
@@ -17057,6 +17015,7 @@
 		)
 		(filled_polygon
 			(layer "F.Cu")
+			(island yes)
 			(pts
 				(xy 196.357392 102.269685) (xy 196.396241 102.309473) (xy 197.14 103.53) (xy 197.670181 103.53)
 				(xy 197.73722 103.549685) (xy 197.782975 103.602489) (xy 197.794051 103.659682) (xy 197.755321 104.503982)
@@ -17264,6 +17223,46 @@
 				(xy 200.229148 102.14998) (xy 199.801239 102.140255) (xy 199.793186 102.136703) (xy 199.79 102.128758)
 				(xy 199.79 101.628082) (xy 199.793368 101.61995) (xy 199.797604 101.617262) (xy 201.037311 101.170967)
 				(xy 201.042828 101.170404)
+			)
+		)
+	)
+	(zone
+		(net "/ERROR_OUT")
+		(layer "F.Cu")
+		(hatch none 0.1)
+		(priority 30004)
+		(attr
+			(teardrop
+				(type padvia)
+			)
+		)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0.0254)
+		(fill yes
+			(island_removal_mode 1)
+		)
+		(polygon
+			(pts
+				(xy 196.437829 88.3) (xy 196.362636 88.295231) (xy 196.303967 88.28185) (xy 196.221736 88.236793)
+				(xy 196.168351 88.187998) (xy 196.088402 88.117175) (xy 196.034174 88.081628) (xy 195.964805 88.047836)
+				(xy 195.849 88.325) (xy 195.889158 88.622433) (xy 196.066741 88.583408) (xy 196.141696 88.555651)
+				(xy 196.259713 88.516741) (xy 196.336679 88.504539) (xy 196.437829 88.5)
+			)
+		)
+		(filled_polygon
+			(layer "F.Cu")
+			(pts
+				(xy 195.975334 88.052985) (xy 195.975927 88.053254) (xy 196.033505 88.081302) (xy 196.034795 88.082035)
+				(xy 196.087691 88.116709) (xy 196.089035 88.117736) (xy 196.168269 88.187925) (xy 196.168383 88.188028)
+				(xy 196.221736 88.236793) (xy 196.303967 88.28185) (xy 196.362636 88.295231) (xy 196.426871 88.299305)
+				(xy 196.434909 88.303248) (xy 196.437829 88.310981) (xy 196.437829 88.488813) (xy 196.434402 88.497086)
+				(xy 196.426654 88.500501) (xy 196.356835 88.503634) (xy 196.336679 88.504539) (xy 196.259718 88.51674)
+				(xy 196.259715 88.51674) (xy 196.259713 88.516741) (xy 196.141696 88.555651) (xy 196.141693 88.555652)
+				(xy 196.067497 88.583127) (xy 196.065945 88.583582) (xy 195.901564 88.619706) (xy 195.892748 88.618135)
+				(xy 195.887626 88.61079) (xy 195.887458 88.609844) (xy 195.849424 88.328143) (xy 195.850222 88.322074)
+				(xy 195.960028 88.059268) (xy 195.966379 88.052958)
 			)
 		)
 	)
@@ -17628,7 +17627,7 @@
 		)
 	)
 	(zone
-		(net "Net-(Q1-S)")
+		(net "/SMPS_VIN")
 		(layer "F.Cu")
 		(uuid "f4aaf733-c06f-42d4-85b2-e17bab815dce")
 		(hatch edge 0.5)
