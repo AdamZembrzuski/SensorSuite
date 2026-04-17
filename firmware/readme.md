@@ -12,12 +12,12 @@ For build and flash instructions, see the
 
 | Feature | Status |
 |---|---|
-| VL53L4CD ToF ranging | Complete |
+| VL53L4CD ToF detection | Complete |
 | SHT30 temperature / humidity | Complete |
 | BLE service | Complete |
-| NVM storage | In development |
-| Firmware over the air | Planned |
-| Mesh Networking | Planned |
+| NVM storage | Complete |
+| Dynamic ToF detection interval | Planned |
+| SAADC VCC monitoring | Planned |
 
 ### BLE Service
 
@@ -45,6 +45,7 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 | Connection Interval 1024ms | `0x03` | none | Sets new connection interval |
 | Download Start | `0x10` | 0 on success | Starts timestamp download notifications |
 | Download Stop | `0x11` | 0 on success | Stops timestamp download notifications |
+| Storage Clear | `0x13` | 0 on success | Clears NVM, including bonding, configuration, and logs |
 | Firmware Version | `0x20` |int (eg `12` for V1.2)| Returns FW Version |
 | Active Period 08-16 | `0x30` |  0 on success | Sets the device to only detect <sup>¶</sup> between 08:00 and 16:00 |
 | Active Period 08-18 | `0x31` |  0 on success | Sets the device to only detect between 08:00 and 18:00 |
@@ -58,15 +59,47 @@ Service UUID : `229a0001-ad33-4a06-9bce-c34201743655`
 ### Data Collection
 The device only collects timestamp logs if it is within the active period, definable via the 0x3- commands. The device defaults to 24/7 operation on reset.
 
-Ambient logs are collected regardless of the system state (if they are enabled).
+Ambient logs are collected regardless of the system state (if the SHT3x is enabled in `prj.conf`).
 
 ### Logging
 
-*Logging in this section is independent of sensor logging*
+*Logging described in this section is independent of sensor logging*
 
-RTT logging is enabled by default. Connect via the nRF Connect for Desktop 
+RTT logging is enableable in `prj.conf`. Connect via the nRF Connect for Desktop 
 terminal or a J-Link RTT Viewer.
 
-### Key Kconfig Options
-For lowest current consumption **disable all logging** in `prj.conf` this will reduce current consumption by roughly 200μA.<br>
-Key Bluetooth settings such as device name or connection settings can be adjusted in `prj.conf`.
+### Kconfig Options
+All Kconfig options can be adjusted in `firmware/prj.conf`. If changes are not being applied, ensure `prj.conf` is included in the build config.
+
+#### System Level
+<details>
+<summary>For lowest current consumption disable all logging, this will reduce current consumption by roughly 200μA</summary>
+
+  
+```
+CONFIG_USE_SEGGER_RTT=n
+CONFIG_SERIAL=n
+
+CONFIG_LOG=n
+CONFIG_LOG_BACKEND_RTT=n
+CONFIG_LOG_BACKEND_UART=n
+
+CONFIG_PRINTK=n
+CONFIG_BOOT_BANNER=n
+
+CONFIG_UART_CONSOLE=n
+CONFIG_RTT_CONSOLE=n
+```
+
+</details>
+<details>
+<summary>Bluetooth options such as device name and default connection interval are available to be defined statically.</summary>
+  
+```
+CONFIG_BT_DEVICE_NAME="AZSensorSuite-001"
+```
+</details>
+
+#### Application Level
+
+
