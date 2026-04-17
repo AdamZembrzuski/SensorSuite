@@ -1,4 +1,4 @@
-# AZ SensorSuite
+# AZSensorSuite
 
 [![License: TAPR-OHL](https://img.shields.io/badge/License-TAPR%20OHL-blue.svg)](https://web.tapr.org/TAPR_Open_Hardware_License_v1.0.txt)
 
@@ -9,7 +9,7 @@
 ## Overview
 <img width="1920" height="1080" alt="land_export" src="https://github.com/user-attachments/assets/4e11e4e2-a3a2-4446-b661-37c5dac60c5e" />
 
-AZ SensorSuite is an ultra-low-power, data-acquisition hardware platform designed to be user-programmed for a variety of applications. 
+AZSensorSuite (AZSS) is an ultra-low-power, data-acquisition hardware platform designed to be user-programmed for a variety of applications. 
 
 The included example firmware detects when people pass through a doorway into a closed space. A machine learning model (run on a host computer) can then predict when the space is empty so that services like heating or lighting can be automatically disabled.
 
@@ -35,7 +35,7 @@ The included example firmware detects when people pass through a doorway into a 
 * Python 3.7 or higher.
 
 ### Build and Flash Process
-* If working with the development kit, skip step 5 and in `firmware/src/main.c` set `err_led.pin = 10` on line 171.
+* If working with the development kit, skip step 5 and in `firmware/prj.conf` set `CONFIG_APP_BOARD_IS_PROD=n`.
 1.  Clone the repository to a path that contains **no spaces** (e.g., `/projects/sensor_suite` is good; `/projects/sensor suite/` will cause build errors).
 2.  Open the application in nRF Connect and navigate to the `firmware` subfolder.
 3.  Create a new build configuration:
@@ -46,9 +46,13 @@ The included example firmware detects when people pass through a doorway into a 
 4.  Click **Generate and Build**.
 5.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
 6.  Press **Flash and Erase**. (You may flash without erase after the first flash)
-* If a module is being flashed for the first time, it may have NVM protections enabled. Click `Yes` in the pop-up to allow recovery.
+* If a module is being flashed for the first time, it may have memory protections enabled. Click `Yes` in the pop-up to allow recovery.
 
 <img width="462" height="150" alt="error" src="https://github.com/user-attachments/assets/c01f1521-834b-4669-94a2-276189f38c14" />
+
+## Release Notes
+
+v1.0.0 - 17/04/26 - Initial release with all basic features implemented
 
 
 ## License
