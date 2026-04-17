@@ -25,7 +25,7 @@ laser-cut for cleaner paste release on the LGA pads of the Nora B206.
 
 ### Assembly Notes
 
-- The U-Blox Nora B206 is an LGA component and **must be reflow soldered**. 
+- The U-Blox Nora B206 and ST VL53L4CD are LGA components and **must be reflow soldered**. 
   Hand soldering is not possible.
 
 ### Schematic Notes
