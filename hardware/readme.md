@@ -36,3 +36,10 @@ laser-cut for cleaner paste release on the LGA pads of the Nora B206.
 
 > [!TIP]
 > If the SHT3x is not required, C11 and U4 can be DNP'd, and in the example firmware, `CONFIG_APP_SHT_ENABLE` should be set to `n`in `firmware/prj.conf`.
+
+### Test Points
+
+Test point layout is visible below and is consistent with the schematic.
+
+
+<img width="1920" height="1080" alt="test points" src="https://github.com/user-attachments/assets/e3f01004-9dde-4c46-b176-f7fd68e1c987" />
