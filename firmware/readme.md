@@ -1,8 +1,7 @@
 ## Firmware
 
-This folder contains all firmware source files and documentation. The latest firmware 
-has been verified working on PCB V1.02. The SHT30 implementation has been tested 
-separately on the Development Kit.
+This folder contains all firmware source files and documentation. The latest firmware (release v1.0.0)
+has been verified working on PCB V1.10 (all functions).
 
 For build and flash instructions, see the 
 [main README](../README.md#example-quickstart-guide).
@@ -101,5 +100,19 @@ CONFIG_BT_DEVICE_NAME="AZSensorSuite-001"
 </details>
 
 #### Application Level
+
+Application specific Kconfig option descriptions can be viewed in the visual kconfig editor, in the nRF  Connect SDK. Below are some key options.
+
+- `CONFIG_APP_VL53_DETECTION_INTERVAL_MS` - Inter-measurement period for the VL53L4CD ToF sensor in milliseconds. Must be a multiple of ten.
+
+- `CONFIG_APP_CONSEC_DETECT_FILTER` - Require multiple consecutive detections before logging an event. Should be paired with a lowered detection interval.
+
+- `CONFIG_APP_SHT_ENABLE` - Disable functions related to the SHT3x, notably it still *remains powered* even in this mode.
+
+- `CONFIG_APP_LOG_FULL_STRATEGY` - Determines if logs are overwritten when full or if writing stops.
+
+- `CONFIG_APP_BOARD_IS_PROD` - Should be set to `n` if building for the nRF5454L15-DK.
+
+
 
 

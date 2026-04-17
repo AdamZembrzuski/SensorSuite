@@ -30,9 +30,9 @@ laser-cut for cleaner paste release on the LGA pads of the Nora B206.
 
 ### Schematic Notes
 
-- **R11** should be replaced to a suitable value for current measurement instead of 0 ohms.
+- **R1** should be replaced to a suitable value for current measurement instead of 0 ohms.
 - Several components are marked DNP. These are intended for development boards only 
   and should be omitted on production boards.
 
 > [!TIP]
-> If the SHT3x is not required, C11 and U4 can be DNP'd, and in the example firmware, `CONFIG_APP_SHT_ENABLE` should be set to `n`in `prj.conf`.
+> If the SHT3x is not required, C11 and U4 can be DNP'd, and in the example firmware, `CONFIG_APP_SHT_ENABLE` should be set to `n`in `firmware/prj.conf`.
