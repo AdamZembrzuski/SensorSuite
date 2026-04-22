@@ -7,13 +7,27 @@ config APP_FW_VERSION
       Major/minor firmware version reported via the CMND_FW_VER command.
       Encoded as a single byte (e.g., 10 for v1.0).
 
-config APP_VL53_DETECTION_INTERVAL_MS
-    int "VL53L4CD Detection Interval (ms)"
-    default 240
+config APP_VL53_IDLE_DETECTION_INTERVAL_MS
+    int "VL53L4CD Idle Detection Interval (ms)"
+    default 480
     help
-      Inter-measurement period for the VL53L4CD ToF sensor in milliseconds.
-      Must be a multiple of 10. Lower values increase detection responsiveness
-      at the cost of higher power consumption.
+      Inter-measurement period while no activity is detected. Higher value
+      reduces power consumption during idle periods.
+
+config APP_VL53_ACTIVE_DETECTION_INTERVAL_MS
+    int "VL53L4CD Active Detection Interval (ms)"
+    default 120
+    help
+      Inter-measurement period while activity is detected. Lower value
+      increases responsiveness during an active detection window.
+      Must be less than APP_VL53_IDLE_DETECTION_INTERVAL_MS.
+
+config APP_VL53_INACTIVITY_TIMEOUT_MS
+    int "VL53L4CD Inactivity Timeout (ms)"
+    default 10000
+    help
+      Duration after the last interrupt with no further interrupts before
+      the sensor reverts to the idle detection interval.
 
 config APP_CONSEC_ADVERTISING_START_MS
     int "Consecutive Advertising Start (ms)"
@@ -128,6 +142,15 @@ config APP_LOG_STOP_WHEN_FULL
 
 endchoice
 
+config APP_LOG_PERSIST_DELAY_MS
+    int "ZMS Persist Minimum Delta (ms)"
+    default 60000
+    help
+      Minimum inter-event delta required before a detection triggers an
+      immediate ZMS state persist. Events with a shorter delta are still
+      logged to the ring buffer but do not flush state to RRAM, relying
+      instead on the VL53 watchdog periodic persist.
+
 config APP_SENSOR_WQ_STACK_SIZE
     int "Sensor Workqueue Stack Size (bytes)"
     default 2048
@@ -166,24 +189,19 @@ config APP_WDT_HEARTBEAT_INTERVAL_MS
       less than APP_WDT_FEED_INTERVAL_MS to guarantee the bit is set before
       each feed window.
 
-config APP_CONSEC_DETECT_FILTER
-    bool "Enable Consecutive Detection Filter"
-    default n
+config APP_CONSEC_DETECT_THRESHOLD_IDLE
+    int "Consecutive Detection Threshold (Idle)"
+    default 0
     help
-      Require multiple consecutive detections before logging an event.
-      Useful in environments with higher false positive rates or where
-      the sensor is mounted further from the entry point than recommended.
-      Has no effect in typical doorframe deployments with a white matte
-      target where hardware filtering is sufficient.
+      Consecutive detections required to log an event when the sensor
+      is operating at the idle interval. Set to 0 to disable.
 
-config APP_CONSEC_DETECT_THRESHOLD
-    int "Consecutive Detection Threshold"
-    default 2
-    depends on APP_CONSEC_DETECT_FILTER
+config APP_CONSEC_DETECT_THRESHOLD_ACTIVE
+    int "Consecutive Detection Threshold (Active)"
+    default 0
     help
-      Number of consecutive detections within the detection interval
-      required before an event is logged. Only active when
-      APP_CONSEC_DETECT_FILTER is enabled.
+      Consecutive detections required to log an event when the sensor
+      is operating at the active interval. Set to 0 to disable.
 
 endmenu
 

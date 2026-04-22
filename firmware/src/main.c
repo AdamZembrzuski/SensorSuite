@@ -59,11 +59,15 @@
 #define INTERVAL_UPDATE_DELAY_MS 300
 
 /* VL53L4CD */
-#define DETECTION_INTERVAL       CONFIG_APP_VL53_DETECTION_INTERVAL_MS
-#define CONSEC_ADVERTISING_START CONFIG_APP_CONSEC_ADVERTISING_START_MS
-#define VL53_DISTANCE_THRESH_MM  CONFIG_APP_VL53_DISTANCE_THRESH_MM
-#define VL53_WATCHDOG_PERIOD_MS  CONFIG_APP_VL53_WATCHDOG_PERIOD_MS
-#define VL53L4CD_SENSOR_ID       0xEBAA
+#define IDLE_DETECTION_INTERVAL_MS   CONFIG_APP_VL53_IDLE_DETECTION_INTERVAL_MS
+#define ACTIVE_DETECTION_INTERVAL_MS CONFIG_APP_VL53_ACTIVE_DETECTION_INTERVAL_MS
+#define INACTIVITY_TIMEOUT_MS        CONFIG_APP_VL53_INACTIVITY_TIMEOUT_MS
+#define CONSEC_ADVERTISING_START     CONFIG_APP_CONSEC_ADVERTISING_START_MS
+#define VL53_DISTANCE_THRESH_MM      CONFIG_APP_VL53_DISTANCE_THRESH_MM
+#define VL53_WATCHDOG_PERIOD_MS      CONFIG_APP_VL53_WATCHDOG_PERIOD_MS
+#define IDLE_CONSEC_DETECT_THRESHOLD CONFIG_APP_CONSEC_DETECT_THRESHOLD_IDLE
+#define ACTIVE_CONSEC_DETECT_THRESHOLD CONFIG_APP_CONSEC_DETECT_THRESHOLD_ACTIVE
+#define VL53L4CD_SENSOR_ID           0xEBAA
 
 /* SHT30 */
 #define AMBIENT_PERIOD_MS        CONFIG_APP_SHT_READ_INTERVAL_MS
@@ -71,6 +75,9 @@
 /* Schedule */
 #define SCHEDULE_MAX_SLEEP_MS    CONFIG_APP_SCHEDULE_MAX_SLEEP_MS
 #define SETTINGS_SCHED_KEY       "azss/sched"
+
+/* ZMS Logging */
+#define LOG_PERSIST_DELAY_MS     CONFIG_APP_LOG_PERSIST_DELAY_MS
 
 /* Command bytes written to the command characteristic */
 #define CMND_CONN_INTERVAL_20ms     0x00
@@ -121,6 +128,7 @@ static void adv_work_handler(struct k_work *work);
 static void adv_timeout_work_handler(struct k_work *work);
 static void update_interval_work_handler(struct k_work *work);
 static void counter_work_handler(struct k_work *work);
+static void inactivity_work_handler(struct k_work *work);
 static void counter_state_reset(void);
 static void vl53_stop_work_handler(struct k_work *work);
 static void vl53_watchdog_work_handler(struct k_work *work);
@@ -218,6 +226,8 @@ static uint32_t delta_unix_sec  = 0;
 static int64_t  carry_ms        = 0;
 static atomic_t logging_paused  = ATOMIC_INIT(0);
 
+static atomic_t interval_written = ATOMIC_INIT(0);
+
 /* xshut cycle causes a false sample */
 static bool next_sample_xshut = false;
 
@@ -225,6 +235,7 @@ K_THREAD_STACK_DEFINE(sensor_wq_stack, CONFIG_APP_SENSOR_WQ_STACK_SIZE);
 static struct k_work_q sensor_wq;
 
 K_WORK_DELAYABLE_DEFINE(counter_work,           counter_work_handler);
+K_WORK_DELAYABLE_DEFINE(inactivity_work,        inactivity_work_handler);
 K_WORK_DEFINE(vl53_stop_work,                   vl53_stop_work_handler);
 K_WORK_DELAYABLE_DEFINE(vl53_watchdog_work,     vl53_watchdog_work_handler);
 K_WORK_DELAYABLE_DEFINE(vl53_sched_reinit_work, vl53_sched_reinit_work_handler);
@@ -656,7 +667,7 @@ static void VL53L4CD_user_init(void)
         goto cleanup;
     }
 
-    status = VL53L4CD_ULP_SetInterMeasurementInMs(dev, (int)DETECTION_INTERVAL);
+    status = VL53L4CD_ULP_SetInterMeasurementInMs(dev, (uint32_t)IDLE_DETECTION_INTERVAL_MS);
     if (status) {
         LOG_ERR("SetInterMeasurementInMs failed: %u", status);
         goto cleanup;
@@ -765,9 +776,26 @@ static void counter_state_reset(void)
     carry_ms      = 0;
 }
 
+static void inactivity_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    k_mutex_lock(&i2c22_mutex, K_FOREVER);
+    pm_i2c22_get_or_fatal();
+
+    VL53L4CD_ULP_SetInterMeasurementInMs(0, IDLE_DETECTION_INTERVAL_MS);
+
+    pm_i2c22_put_or_fatal();
+    k_mutex_unlock(&i2c22_mutex);
+
+    atomic_set(&interval_written, 0);
+}
+
 static void counter_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
+
+    bool was_idle = false;
 
     k_mutex_lock(&i2c22_mutex, K_FOREVER);
     pm_i2c22_get_or_fatal();
@@ -777,29 +805,47 @@ static void counter_work_handler(struct k_work *work)
 
     uint8_t status = VL53L4CD_ULP_ERROR_NONE;
     for (int attempt = 1; attempt <= 3; attempt++) {
-        status = VL53L4CD_ULP_ClearInterrupt((uint16_t)0);
+        status = VL53L4CD_ULP_ClearInterrupt(0);
         if (status == VL53L4CD_ULP_ERROR_NONE) {
             break;
         }
         LOG_ERR("ClearInterrupt failed attempt %d/3: %d", attempt, status);
     }
+
+    if (next_sample_xshut) {
+        next_sample_xshut = false;
+        pm_i2c22_put_or_fatal();
+        k_mutex_unlock(&i2c22_mutex);
+        return;
+    }
+
     if (status != VL53L4CD_ULP_ERROR_NONE) {
         pm_i2c22_put_or_fatal();
         k_mutex_unlock(&i2c22_mutex);
         error_fatal(FATAL_VL53_CLEAR_IRQ);
     }
 
+    k_work_reschedule_for_queue(&sensor_wq, &inactivity_work, K_MSEC(INACTIVITY_TIMEOUT_MS));
+
+    if (atomic_get(&interval_written) == 0){
+
+        VL53L4CD_ULP_SetInterMeasurementInMs(0, ACTIVE_DETECTION_INTERVAL_MS);
+
+        atomic_set(&interval_written, 1);
+
+        was_idle = true;
+    }
+
     pm_i2c22_put_or_fatal();
     k_mutex_unlock(&i2c22_mutex);
 
-    if (next_sample_xshut) {
-        next_sample_xshut = false;
-        return;
-    }
+    uint32_t current_interval_ms = was_idle
+                                ? IDLE_DETECTION_INTERVAL_MS
+                                : ACTIVE_DETECTION_INTERVAL_MS;
 
     /* A gap wider than 1.1× the measurement period means this is a new
      * independent crossing rather than a bounce of the previous interrupt */
-    if (diff_now >= DETECTION_INTERVAL + DETECTION_INTERVAL / 10) {
+    if (diff_now >= current_interval_ms + current_interval_ms / 10) {
         int64_t timestamp_unix = get_current_timestamp();
 
         if (last_event_unix != 0) {
@@ -827,24 +873,22 @@ static void counter_work_handler(struct k_work *work)
 
         consec_valid++;
 
-#if IS_ENABLED(CONFIG_APP_CONSEC_DETECT_FILTER)
-        if (consec_valid >= CONFIG_APP_CONSEC_DETECT_THRESHOLD) {
-#endif
+        if (consec_valid >= (was_idle
+                            ? IDLE_CONSEC_DETECT_THRESHOLD
+                            : ACTIVE_CONSEC_DETECT_THRESHOLD)) {
             rb_stamp_put(delta_unix_sec);
-            if (delta_unix_ms > 60*1000){
+            if (delta_unix_ms > LOG_PERSIST_DELAY_MS){
                 int ret = log_persist_state(last_event_unix, carry_ms, get_current_timestamp());
                 if (ret) {
                     LOG_WRN("Failed to persist log state: %d", ret);
                 }
             }
             LOG_DBG("count | %u", rb_stamp_count());
-#if IS_ENABLED(CONFIG_APP_CONSEC_DETECT_FILTER)
         }
-#endif
 
         last_event_unix = timestamp_unix;
 
-    } else if (consec_detect >= CONSEC_ADVERTISING_START / DETECTION_INTERVAL
+    } else if (consec_detect >= CONSEC_ADVERTISING_START / current_interval_ms
                && !atomic_get(&is_advertising)
                && !is_ble_connected()) {
 

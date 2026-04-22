@@ -1,0 +1,26 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "nrf-connect",
+			"request": "launch",
+			"name": "Launch firmware/build",
+			"config": "${workspaceFolder}/firmware/build",
+			"runToEntryPoint": "main"
+		},
+		{
+			"type": "nrf-connect",
+			"request": "launch",
+			"name": "Launch firmware/build/firmware",
+			"config": "${workspaceFolder}/firmware/build/firmware",
+			"runToEntryPoint": "main"
+		},
+		{
+			"type": "nrf-connect",
+			"request": "launch",
+			"name": "Launch firmware/build/firmware/tfm",
+			"config": "${workspaceFolder}/firmware/build/firmware/tfm",
+			"runToEntryPoint": "main"
+		}
+	]
+}

@@ -1,5 +1,10 @@
 {
     "nrf-connect.applications": [
         "${workspaceFolder}/firmware"
-    ]
+    ],
+    "nrf-connect.debugging.bindings": {
+        "${workspaceFolder}/firmware/build": "Launch firmware/build",
+        "${workspaceFolder}/firmware/build/firmware": "Launch firmware/build/firmware",
+        "${workspaceFolder}/firmware/build/firmware/tfm": "Launch firmware/build/firmware/tfm"
+    }
 }
