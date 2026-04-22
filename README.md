@@ -52,7 +52,7 @@ The included example firmware detects when people pass through a doorway into a 
 
 ## Release Notes
 
-v1.0.0 - 17/04/26 - Initial release with all basic features implemented
+v1.0.0 - 17/04/26 - Initial release with all core features implemented
 
 
 ## License
