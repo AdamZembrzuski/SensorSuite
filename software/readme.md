@@ -1,12 +1,14 @@
 ## Software
 
-This folder contains the host-side Python client for communicating with  ML functionality has not been implemented.
+This folder contains the host-side Python client for communicating with
 AZSensorSuite over BLE.
 
-**Python 3.7 or higher is required.**
+**ML functionality has not been implemented yet, and will not be implemented in the forseeable future.**
 
 > [!WARNING]
 > The software in this folder has been heavily vibecoded. Expect unreliability. (A human rewrite is planned)
+
+*Python 3.7 or higher is required.*
 
 ##
 
