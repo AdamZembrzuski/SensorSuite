@@ -15,7 +15,7 @@ For build and flash instructions, see the
 | SHT30 temperature / humidity | Complete |
 | BLE service | Complete |
 | NVM storage | Complete |
-| ToF bursting | Planned |
+| Dynamic ToF interval | Complete |
 | SAADC VCC monitoring | Planned |
 
 ### BLE Service
