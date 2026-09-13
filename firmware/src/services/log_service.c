@@ -58,6 +58,8 @@ extern struct bt_gatt_service sense_service_svc;
 #define BULK_ATTR_INDEX 11
 #define STREAM_MAX_ERR  CONFIG_APP_STREAM_MAX_ERR
 
+#define STREAM_FALLBACK_MS  2000
+
 /* ════════════════════════════════════════════════════════════════
  * Types
  * ════════════════════════════════════════════════════════════════ */
@@ -688,11 +690,14 @@ static void bulk_sent_cb(struct bt_conn *c, void *user_data)
     ARG_UNUSED(c);
     ARG_UNUSED(user_data);
 
+    if (!atomic_cas(&bulk_in_flight, true, false)) {
+        return;
+    }
+
     stream_last_sent_ms = k_uptime_get();
-    atomic_set(&bulk_in_flight, false);
 
     if (atomic_get(&bulk_stream_active)) {
-        k_work_schedule_for_queue(&stream_wq, &bulk_stream_work, K_MSEC(20));
+        k_work_reschedule_for_queue(&stream_wq, &bulk_stream_work, K_MSEC(20));
     }
 }
 
@@ -951,10 +956,17 @@ static void bulk_stream_work_handler(struct k_work *work)
     ARG_UNUSED(work);
 
     if (atomic_get(&bulk_in_flight)) {
-        if (k_uptime_get() - stream_last_sent_ms > 10000) {
-            LOG_WRN("stream: bulk_in_flight stuck >10s, clearing");
+        if (k_uptime_get() - stream_last_sent_ms > 2000) {
+            LOG_WRN("stream: notify callback lost, resending");
             atomic_set(&bulk_in_flight, false);
         } else {
+            /* Keep the work scheduled while waiting for the callback.
+             * Zephyr may never call bulk_sent_cb after notify returns 0,
+             * so a bare return here stalled the stream permanently. */
+            if (atomic_get(&bulk_stream_active)) {
+                k_work_reschedule_for_queue(&stream_wq, &bulk_stream_work,
+                                            K_MSEC(200));
+            }
             return;
         }
     }
@@ -995,6 +1007,9 @@ static void bulk_stream_work_handler(struct k_work *work)
         }
     } else {
         stream_err_count = 0;
+        /* fallback deadline; bulk_sent_cb pulls it earlier via reschedule */
+        k_work_reschedule_for_queue(&stream_wq, &bulk_stream_work,
+                                    K_MSEC(STREAM_FALLBACK_MS));
     }
 }
 
