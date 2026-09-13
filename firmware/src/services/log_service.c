@@ -692,7 +692,7 @@ static void bulk_sent_cb(struct bt_conn *c, void *user_data)
     atomic_set(&bulk_in_flight, false);
 
     if (atomic_get(&bulk_stream_active)) {
-        k_work_schedule_for_queue(&stream_wq, &bulk_stream_work, K_NO_WAIT);
+        k_work_schedule_for_queue(&stream_wq, &bulk_stream_work, K_MSEC(20));
     }
 }
 
@@ -704,6 +704,7 @@ static int bulk_notify_once(struct bt_conn *c, const uint8_t *data, uint16_t len
     bulk_ntf_params.func      = bulk_sent_cb;
     bulk_ntf_params.user_data = NULL;
 
+    stream_last_sent_ms = k_uptime_get();
     return bt_gatt_notify_cb(c, &bulk_ntf_params);
 }
 
@@ -950,8 +951,8 @@ static void bulk_stream_work_handler(struct k_work *work)
     ARG_UNUSED(work);
 
     if (atomic_get(&bulk_in_flight)) {
-        if (k_uptime_get() - stream_last_sent_ms > 2000) {
-            LOG_WRN("stream: bulk_in_flight stuck >2s, clearing");
+        if (k_uptime_get() - stream_last_sent_ms > 10000) {
+            LOG_WRN("stream: bulk_in_flight stuck >10s, clearing");
             atomic_set(&bulk_in_flight, false);
         } else {
             return;

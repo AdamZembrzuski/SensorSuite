@@ -673,7 +673,7 @@ static void VL53L4CD_user_init(void)
         goto cleanup;
     }
 
-    status = VL53L4CD_ULP_SetMacroTiming(dev, 50);
+    status = VL53L4CD_ULP_SetMacroTiming(dev, 40);
     if (status) {
         LOG_ERR("SetMacroTiming failed: %u", status);
         goto cleanup;
@@ -685,7 +685,7 @@ static void VL53L4CD_user_init(void)
         goto cleanup;
     }
 
-    status = VL53L4CD_ULP_SetSignalThreshold(dev, 600);
+    status = VL53L4CD_ULP_SetSignalThreshold(dev, 900);
     if (status) {
         LOG_ERR("SetSignalThreshold failed: %u", status);
         goto cleanup;
