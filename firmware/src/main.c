@@ -61,6 +61,8 @@
 /* VL53L4CD */
 #define IDLE_DETECTION_INTERVAL_MS   CONFIG_APP_VL53_IDLE_DETECTION_INTERVAL_MS
 #define ACTIVE_DETECTION_INTERVAL_MS CONFIG_APP_VL53_ACTIVE_DETECTION_INTERVAL_MS
+#define DETECTION_MIN_GAP_PCT        CONFIG_APP_VL53_DETECTION_MIN_GAP_PCT
+#define CROSSING_GAP_PCT             CONFIG_APP_VL53_CROSSING_GAP_PCT
 #define INACTIVITY_TIMEOUT_MS        CONFIG_APP_VL53_INACTIVITY_TIMEOUT_MS
 #define CONSEC_ADVERTISING_START     CONFIG_APP_CONSEC_ADVERTISING_START_MS
 #define VL53_DISTANCE_THRESH_MM      CONFIG_APP_VL53_DISTANCE_THRESH_MM
@@ -212,17 +214,14 @@ static const struct gpio_dt_spec vl53_xshut_spec = {
     .port     = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
 };
 
-/* consec_detect: counts detections within the advertising trigger window.
- * consec_valid:  counts independent crossing events for the detection filter. */
-static uint8_t  consec_detect       = 0;
-static uint8_t  consec_valid        = 0;
-static int64_t  last_detection_time = 0;
+/* consec_detect counts detections within the advertising trigger window. */
+static uint8_t  consec_detect        = 0;
+static uint32_t detections_remaining = 0;
+static int64_t  last_detection_time  = 0;
 
 /* carry_ms holds the sub-second remainder between logged events to avoid
  * accumulating rounding error across the delta timestamp chain. */
 static int64_t  last_event_unix = 0;
-static int64_t  delta_unix_ms   = 0;
-static uint32_t delta_unix_sec  = 0;
 static int64_t  carry_ms        = 0;
 static atomic_t logging_paused  = ATOMIC_INIT(0);
 
@@ -315,6 +314,11 @@ static bool is_ble_connected(void)
     bool connected = (conn != NULL);
     k_mutex_unlock(&conn_mutex);
     return connected;
+}
+
+static bool vl53_paused_for_ble(void)
+{
+    return IS_ENABLED(CONFIG_APP_VL53_PAUSE_ON_BLE_CONNECTION) && is_ble_connected();
 }
 
 static void advertising_start(void)
@@ -468,25 +472,26 @@ static void on_connected(struct bt_conn *conn_c, uint8_t err)
 
     atomic_set(&is_advertising, false);
 
-    int err_cfg = gpio_pin_interrupt_configure_dt(&vl53_int_spec, GPIO_INT_DISABLE);
-    if (err_cfg) {
-        LOG_ERR("Failed to disable GPIO interrupt (%d)", err_cfg);
-        error_fatal(FATAL_GPIO_INIT);
-    }
+    if (IS_ENABLED(CONFIG_APP_VL53_PAUSE_ON_BLE_CONNECTION)) {
+        int err_cfg = gpio_pin_interrupt_configure_dt(&vl53_int_spec, GPIO_INT_DISABLE);
+        if (err_cfg) {
+            LOG_ERR("Failed to disable GPIO interrupt (%d)", err_cfg);
+            error_fatal(FATAL_GPIO_INIT);
+        }
 
-    k_work_cancel_delayable(&counter_work);
-    atomic_set(&logging_paused, true);
+        k_work_cancel_delayable(&counter_work);
+        atomic_set(&logging_paused, true);
+        counter_state_reset();
+
+        if (!sched.vl53_sched_off) {
+            k_work_submit_to_queue(&sensor_wq, &vl53_stop_work);
+        }
+    }
 
 #if IS_ENABLED(CONFIG_APP_SHT_ENABLE)
     k_work_cancel_delayable(&ambient_work);
     atomic_set(&ambient_paused, true);
 #endif
-
-    counter_state_reset();
-
-    if (!sched.vl53_sched_off) {
-        k_work_submit_to_queue(&sensor_wq, &vl53_stop_work);
-    }
 }
 
 static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
@@ -509,7 +514,7 @@ static void on_disconnected(struct bt_conn *conn_dc, uint8_t reason)
 
     LOG_DBG("Disconnected, reason 0x%02X", reason);
 
-    if (!sched.vl53_sched_off) {
+    if (IS_ENABLED(CONFIG_APP_VL53_PAUSE_ON_BLE_CONNECTION) && !sched.vl53_sched_off) {
         atomic_set(&logging_paused, false);
         k_work_reschedule_for_queue(&sensor_wq, &vl53_sched_reinit_work, K_MSEC(10));
     }
@@ -672,8 +677,9 @@ static void VL53L4CD_user_init(void)
         LOG_ERR("SetInterMeasurementInMs failed: %u", status);
         goto cleanup;
     }
+    atomic_set(&interval_written, 0);
 
-    status = VL53L4CD_ULP_SetMacroTiming(dev, 40);
+    status = VL53L4CD_ULP_SetMacroTiming(dev, 120);
     if (status) {
         LOG_ERR("SetMacroTiming failed: %u", status);
         goto cleanup;
@@ -685,7 +691,7 @@ static void VL53L4CD_user_init(void)
         goto cleanup;
     }
 
-    status = VL53L4CD_ULP_SetSignalThreshold(dev, 900);
+    status = VL53L4CD_ULP_SetSignalThreshold(dev, 1200);
     if (status) {
         LOG_ERR("SetSignalThreshold failed: %u", status);
         goto cleanup;
@@ -734,6 +740,10 @@ static void vl53_sched_reinit_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
+    if (sched.vl53_sched_off || vl53_paused_for_ble()) {
+        return;
+    }
+
     VL53L4CD_user_init();
 
     int err = gpio_pin_interrupt_configure_dt(&vl53_int_spec, GPIO_INT_EDGE_TO_ACTIVE);
@@ -749,7 +759,7 @@ static void vl53_watchdog_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    if (atomic_get(&logging_paused) || sched.vl53_sched_off || is_ble_connected()) {
+    if (atomic_get(&logging_paused) || sched.vl53_sched_off || vl53_paused_for_ble()) {
         goto reschedule;
     }
 
@@ -771,9 +781,9 @@ reschedule:
 
 static void counter_state_reset(void)
 {
-    consec_detect = 0;
-    consec_valid  = 0;
-    carry_ms      = 0;
+    consec_detect        = 0;
+    detections_remaining = 0;
+    carry_ms             = 0;
 }
 
 static void inactivity_work_handler(struct k_work *work)
@@ -783,10 +793,15 @@ static void inactivity_work_handler(struct k_work *work)
     k_mutex_lock(&i2c22_mutex, K_FOREVER);
     pm_i2c22_get_or_fatal();
 
-    VL53L4CD_ULP_SetInterMeasurementInMs(0, IDLE_DETECTION_INTERVAL_MS);
+    uint8_t status = VL53L4CD_ULP_SetInterMeasurementInMs(0, IDLE_DETECTION_INTERVAL_MS);
 
     pm_i2c22_put_or_fatal();
     k_mutex_unlock(&i2c22_mutex);
+
+    if (status) {
+        LOG_ERR("Failed to restore VL53 idle interval: %u", status);
+        error_fatal(FATAL_VL53_INIT);
+    }
 
     atomic_set(&interval_written, 0);
 }
@@ -829,7 +844,13 @@ static void counter_work_handler(struct k_work *work)
 
     if (atomic_get(&interval_written) == 0){
 
-        VL53L4CD_ULP_SetInterMeasurementInMs(0, ACTIVE_DETECTION_INTERVAL_MS);
+        status = VL53L4CD_ULP_SetInterMeasurementInMs(0, ACTIVE_DETECTION_INTERVAL_MS);
+        if (status) {
+            pm_i2c22_put_or_fatal();
+            k_mutex_unlock(&i2c22_mutex);
+            LOG_ERR("Failed to set VL53 active interval: %u", status);
+            error_fatal(FATAL_VL53_INIT);
+        }
 
         atomic_set(&interval_written, 1);
 
@@ -843,65 +864,60 @@ static void counter_work_handler(struct k_work *work)
                                 ? IDLE_DETECTION_INTERVAL_MS
                                 : ACTIVE_DETECTION_INTERVAL_MS;
 
-    /* A gap wider than 1.1× the measurement period means this is a new
-     * independent crossing rather than a bounce of the previous interrupt */
-    if (diff_now >= current_interval_ms + current_interval_ms / 10) {
-        int64_t timestamp_unix = get_current_timestamp();
+    int64_t min_gap_ms = DIV_ROUND_UP((int64_t)current_interval_ms * DETECTION_MIN_GAP_PCT, 100);
+    if (!was_idle && diff_now < min_gap_ms) {
+        return;
+    }
+    last_detection_time = uptime_now;
 
-        if (last_event_unix != 0) {
-            delta_unix_ms = timestamp_unix - last_event_unix;
-            if (delta_unix_ms < 0) {
-                delta_unix_ms = 0;
-            }
-            consec_detect = 0;
-        } else {
-            delta_unix_ms = 0;
-        }
-
-        /* Accumulate sub-second remainder to avoid rounding error drift */
-        int64_t total_delta_ms = carry_ms + delta_unix_ms;
-        int64_t total_delta_s  = total_delta_ms / 1000;
-        int32_t rem_delta_ms   = (int32_t)(total_delta_ms - total_delta_s * 1000);
-
-        if (total_delta_s > INT32_MAX) {
-            delta_unix_sec = INT32_MAX;
-            carry_ms       = 999;
-        } else {
-            delta_unix_sec = (int32_t)total_delta_s;
-            carry_ms       = rem_delta_ms;
-        }
-
-        consec_valid++;
-
-        if (consec_valid >= (was_idle
-                            ? IDLE_CONSEC_DETECT_THRESHOLD
-                            : ACTIVE_CONSEC_DETECT_THRESHOLD)) {
-            rb_stamp_put(delta_unix_sec);
-            if (delta_unix_ms > LOG_PERSIST_DELAY_MS){
-                int ret = log_persist_state(last_event_unix, carry_ms, get_current_timestamp());
-                if (ret) {
-                    LOG_WRN("Failed to persist log state: %d", ret);
-                }
-            }
-            LOG_DBG("count | %u", rb_stamp_count());
-        }
-
-        last_event_unix = timestamp_unix;
-
+    int64_t crossing_gap_ms = DIV_ROUND_UP((int64_t)current_interval_ms * CROSSING_GAP_PCT, 100);
+    if (was_idle || diff_now >= crossing_gap_ms) {
+        consec_detect = 0;
+        detections_remaining = was_idle
+                             ? IDLE_CONSEC_DETECT_THRESHOLD
+                             : ACTIVE_CONSEC_DETECT_THRESHOLD;
     } else if (consec_detect >= CONSEC_ADVERTISING_START / current_interval_ms
                && !atomic_get(&is_advertising)
                && !is_ble_connected()) {
 
         advertising_start();
         consec_detect = 0;
-        consec_valid  = 0;
-
     } else {
         consec_detect++;
-        consec_valid = 0;
     }
 
-    last_detection_time = uptime_now;
+    /* Log once when the crossing reaches its configured detection threshold. */
+    if (detections_remaining == 0) {
+        return;
+    }
+    detections_remaining--;
+    if (detections_remaining > 0) {
+        return;
+    }
+
+    int64_t timestamp_unix = get_current_timestamp();
+    int64_t delta_unix_ms  = last_event_unix != 0
+                           ? MAX(timestamp_unix - last_event_unix, 0)
+                           : 0;
+    int64_t total_delta_ms = carry_ms + delta_unix_ms;
+    int64_t total_delta_s  = total_delta_ms / 1000;
+
+    int ret = rb_stamp_put((int32_t)MIN(total_delta_s, INT32_MAX));
+    if (ret) {
+        LOG_WRN("Failed to log crossing: %d", ret);
+        return;
+    }
+
+    carry_ms = total_delta_s > INT32_MAX ? 999 : total_delta_ms % 1000;
+    last_event_unix = timestamp_unix;
+
+    if (delta_unix_ms > LOG_PERSIST_DELAY_MS) {
+        ret = log_persist_state(last_event_unix, carry_ms, get_current_timestamp());
+        if (ret) {
+            LOG_WRN("Failed to persist log state: %d", ret);
+        }
+    }
+    LOG_DBG("count | %u", rb_stamp_count());
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -930,11 +946,18 @@ static void ambient_work_handler(struct k_work *work)
         goto reschedule;
     }
 
-    sensor_channel_get(sht30_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
-    sensor_channel_get(sht30_dev, SENSOR_CHAN_HUMIDITY, &humidity);
+    err = sensor_channel_get(sht30_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
+    if (!err) {
+        err = sensor_channel_get(sht30_dev, SENSOR_CHAN_HUMIDITY, &humidity);
+    }
 
     pm_i2c22_put_or_fatal();
     k_mutex_unlock(&i2c22_mutex);
+
+    if (err) {
+        LOG_ERR("SHT30 channel read failed: %d", err);
+        goto reschedule;
+    }
 
     last_temp_cdeg  = temp.val1 * 100 + temp.val2 / 10000;
     last_humid_cpct = humidity.val1 * 100 + humidity.val2 / 10000;
@@ -1164,13 +1187,16 @@ static void schedule_work_handler(struct k_work *work)
 
         gpio_pin_set_dt(&vl53_xshut_spec, 0);
 
-        if (!is_ble_connected()) {
+        if (!vl53_paused_for_ble()) {
             atomic_set(&logging_paused, false);
             k_work_reschedule_for_queue(&sensor_wq, &vl53_sched_reinit_work, K_MSEC(10));
-#if IS_ENABLED(CONFIG_APP_SHT_ENABLE)
-            k_work_reschedule_for_queue(&sensor_wq, &ambient_work, K_NO_WAIT);
-#endif
         }
+
+#if IS_ENABLED(CONFIG_APP_SHT_ENABLE)
+        if (!is_ble_connected()) {
+            k_work_reschedule_for_queue(&sensor_wq, &ambient_work, K_NO_WAIT);
+        }
+#endif
 
         LOG_DBG("Entering business hours (%02d:00-%02d:00)",
                 schedule_hours[active].start_h,
@@ -1183,7 +1209,7 @@ static void schedule_work_handler(struct k_work *work)
         atomic_set(&logging_paused, true);
         k_work_cancel_delayable(&counter_work);
 
-        if (!is_ble_connected()) {
+        if (!vl53_paused_for_ble()) {
             int err = gpio_pin_interrupt_configure_dt(&vl53_int_spec, GPIO_INT_DISABLE);
             if (err) {
                 LOG_ERR("Failed to disable GPIO interrupt (%d)", err);

@@ -22,6 +22,22 @@ config APP_VL53_ACTIVE_DETECTION_INTERVAL_MS
       increases responsiveness during an active detection window.
       Must be less than APP_VL53_IDLE_DETECTION_INTERVAL_MS.
 
+config APP_VL53_DETECTION_MIN_GAP_PCT
+    int "VL53L4CD Minimum Detection Gap (% of Period)"
+    range 0 100
+    default 80
+    help
+      Minimum gap between accepted detection interrupts as a percentage
+      of the measurement period. Shorter gaps are ignored.
+
+config APP_VL53_CROSSING_GAP_PCT
+    int "VL53L4CD New Crossing Gap (% of Period)"
+    range 100 2147483647
+    default 120
+    help
+      Minimum gap that starts a new crossing as a percentage of the
+      measurement period. Shorter accepted gaps continue the same crossing.
+
 config APP_VL53_INACTIVITY_TIMEOUT_MS
     int "VL53L4CD Inactivity Timeout (ms)"
     default 10000
@@ -58,6 +74,14 @@ config APP_ADVERTISE_ON_DISCONNECT
       If enabled, immediately starts a new advertising window after a
       BLE disconnection. Useful during development. May be disabled in
       production to conserve power.
+
+config APP_VL53_PAUSE_ON_BLE_CONNECTION
+    bool "Pause VL53L4CD Ranging During BLE Connections"
+    default y
+    help
+      Stop ranging while a BLE connection is active and resume after
+      disconnection if the schedule allows it. Disable to keep ranging
+      during a connection whenever the schedule allows it.
 
 config APP_VL53_DISTANCE_THRESH_MM
     int "VL53L4CD Distance Threshold (mm)"

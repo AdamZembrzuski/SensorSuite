@@ -243,10 +243,13 @@ static int commit_chunk_locked(struct zms_fs *fs,
     meta->entry_count++;
     atomic_inc(entry_count_a);
 
-    /* Best-effort: if power is lost between data write and meta write, the
-     * orphaned entry occupies RRAM but is never iterated or evicted — an
-     * accepted low-probability leak of one chunk per power cycle during a write. */
-    (void)save_meta(fs, meta);
+    /* The data write is already committed, so retain the advanced in-memory
+     * metadata to avoid retrying the same chunk under a new key. Report a
+     * metadata failure clearly; after reboot this newest chunk may be orphaned. */
+    int meta_err = save_meta(fs, meta);
+    if (meta_err) {
+        LOG_ERR("ZMS metadata save failed after data commit: %d", meta_err);
+    }
     return 0;
 }
 

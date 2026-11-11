@@ -57,8 +57,8 @@
  *
  * nRF54L15 RRAM write granularity is 16 B; there is no traditional erase.
  * 2 048 B sectors work well for ZMS on this device.
- *   Stamp  ZMS: 480 KB / 2 KB = 240 sectors
- *   Ambient ZMS:  32 KB / 2 KB =  16 sectors
+ *   Stamp  ZMS: 492 KB / 2 KB = 246 sectors
+ *   Ambient ZMS: 128 KB / 2 KB =  64 sectors
  */
 #define LOG_ZMS_SECTOR_SIZE    2048U
 
