@@ -12,8 +12,9 @@
    
 AZSensorSuite (AZSS) is an ultra-low-power, data-acquisition hardware platform designed to be user-programmed for a variety of applications. 
 
-The included example firmware implements a unidirectional object counter and temperature and humidity logger, with BLE implemented for real time updates and data download.
+The example firmware counts objects passing the ToF sensor and logs temperature and humidity. Over BLE, you can read the latest values and download the logs.
 
+**Current hardware:** PCB v1.20 has been tested with the current firmware on `main`. Firmware v1.1 is upcoming. See the [release notes](#release-notes) for the planned changes.
 
 **Interactive Viewer:** View the PCB and schematic entirely in your browser on [KiCanvas](https://kicanvas.org/?repo=https%3A%2F%2Fgithub.com%2FAZT-GH%2FSensorSuite%2Ftree%2Fmain%2Fhardware).
 
@@ -27,10 +28,11 @@ If you're looking for high-quality advanced PCB manufacturing and assembly and g
 
 ### Hardware Features
 
-* **SoC / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4GHz communication.
-* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 154µW) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html)).
+* **SoC / Connectivity:** Nordic NRF54L15 (via U-Blox Nora B206 module). Supports BLE 6.0, Matter, Thread, Zigbee, and proprietary 2.4 GHz communication.
+* **ToF Sensor:** ST Microelectronics VL53L4CD. Used for ULP presence detection ([STSW-IMG034](https://www.st.com/en/embedded-software/stsw-img034.html), as low as 154 µW) or standard ranging ([STSW-IMG026](https://www.st.com/en/embedded-software/stsw-img026.html)).
 * **Environmental Sensor:** Sensirion SHT30 for ambient temperature and humidity readings.
-* **Power:** Powered by a CR2032 coin cell, converted to 2.8V. The entire system is ultra-low power (e.g., ~400µA in the human detection example).
+* **Accelerometer:** PCB v1.20 includes the STMicroelectronics LIS2DUX12. Accelerometer support is pending in the example firmware, including the upcoming v1.1 release.
+* **Power:** Powered by a CR2032 coin cell, converted to 2.8 V. The entire system is ultra-low power (e.g., ~400 µA in the human detection example).
 
 > [!TIP]
 > The VL53L4CD and SHT30 are both members of pin-compatible sensor families. They can easily be replaced to meet specific project requirements or to navigate supply chain shortages.
@@ -42,7 +44,7 @@ If you're looking for high-quality advanced PCB manufacturing and assembly and g
 * SensorSuite PCB and TC2030-IDC-NL cable.
     * *Alternatively:* NRF54L15DK with sensor breakouts.
 * [nRF Connect SDK v3.1.1](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html) via nRF Connect for VS Code.
-* Python 3.7 or higher.
+* For BLE downloads, see the [Python client setup](software/readme.md#setup).
 
 ### Build and Flash Process
 * If working with the development kit, skip step 5 and in `firmware/prj.conf` set `CONFIG_APP_BOARD_IS_PROD=n`.
@@ -52,13 +54,18 @@ If you're looking for high-quality advanced PCB manufacturing and assembly and g
     * **Target:** `nrf54l15dk/nrf54l15/cpuapp/ns`
     * **Base configuration:** `prj.conf`
     * **Base devicetree overlay:** `boards/nrf54l15dk_nrf54l15_cpuapp_ns.overlay`
+    * For a PCB with Y1 unpopulated, add `lf-rc.conf` under **Extra Kconfig fragments** to use the internal low-frequency RC oscillator.
     * Select your desired build optimization.
 4.  Click **Generate and Build**.
 5.  Connect the TC2030-IDC-NL to the DK. The DK will automatically detect it and change the target to the connected custom PCB.
-6.  Press **Flash and Erase**. (You may flash without erase after the first flash)
+6.  For a first flash or an upgrade from v1.0.0, use **Flash and Erase**. For an upgrade, export the logs before erasing as described below. For later builds with the same partition layout, you can use **Flash** to preserve stored data.
 * If a module is being flashed for the first time, it may have memory protections enabled. Click `Yes` in the pop-up to allow recovery.
 
 <img width="462" height="150" alt="error" src="https://github.com/user-attachments/assets/c01f1521-834b-4669-94a2-276189f38c14" />
+
+### Firmware Upgrade Process
+
+Before upgrading to v1.1, use the [Python client's `download` command](software/readme.md#download-output) with the existing firmware and save a copy of `stamps.csv` and `ambient.csv`. Use **Flash and Erase** for a clean install. Erasing also clears settings and BLE bonds. After flashing, reconnect, sync the device time, and reapply any custom schedule.
 
 ## PCB Ordering Guide
 
@@ -66,16 +73,11 @@ If you're looking for high-quality advanced PCB manufacturing and assembly and g
 |---|
 ### 1. Clone and Open the Project
 1. Clone the repository to your local machine.
-2. Open `azss.kicad_pro` in **KiCad 9** or newer.
+2. Open [`hardware/azss.kicad_pro`](hardware/azss.kicad_pro) in **KiCad 10** or newer for PCB v1.20.
 3. *(Optional)* Make any custom modifications needed for your project.
 
 ### 2. Run Design Rules Check (DRC)
-Run the DRC in KiCad to verify your layout.
-
-> [!NOTE]
-> You can safely ignore the following DRC error:
-> 
-> <img width="303" height="75" alt="KiCad DRC Error" src="https://github.com/user-attachments/assets/adf46d52-0d3a-4314-a157-e372f7856f33" />
+Run DRC in KiCad before exporting fabrication files. KiCad 10 reports a missing `+BATT` connection between a front copper trace and pad 1 of battery holder BT1. Review that connection before ordering.
 
 ### 3. Export Gerber & Drill Files
 1. Open the PCB Editor.
@@ -91,22 +93,7 @@ Run the DRC in KiCad to verify your layout.
 3. Inspect your layout using the online **Gerber Viewer** to verify the gerber exported correctly.
 
 ### 5. Configure PCB Parameters
-Set the board parameters to match the project requirements:
-
-* **Layers:** Select **4 Layers**.
-
-<details>
-<summary><b>Click to view 4-Layer Stackup Configuration</b></summary>
-<br>
-<img width="315" height="213" alt="Layer Stackup Configuration" src="https://github.com/user-attachments/assets/e3a25e56-5cc3-448c-a2f2-9ec223106941" />
-
-</details>
-
-* **Required PCB Specifications:**
-  * **Min Track / Spacing:** `4/4mil`
-  * **Min Hole Size:** `0.3mm`
-  * **Surface Finish:** `Immersion Gold (ENIG)`
-  * **Via Process:** `Plugged vias with solder mask`
+Select **4 Layers**. Use the default stackup and follow the [fabrication specifications and battery-contact via guidance](hardware/readme.md#pcb-fabrication).
 
 ### 6. Add Assembly / Stencil & Checkout
 1. **Stencil / Assembly:** Add an **SMD Stencil** if hand-assembling, or select PCBWay's **Assembly Service** if you want them professionally assembled.
@@ -116,7 +103,18 @@ Set the board parameters to match the project requirements:
    
 ## Release Notes
 
-v1.0.0 - 17/04/26 - Initial release with all core features implemented
+### v1.1 (upcoming)
+
+- Greatly improve reliability across counting and download
+- Add LIS2DUX12 accelerometer in hardware
+- Add more Kconfig symbols for easier customisation
+- Expand log storage size
+- Allow ranging during connection
+- More changes upcoming ...
+
+### v1.0.0 (17 April 2026)
+
+- Initial release with the core counting, environmental logging, and BLE features.
 
 
 ## License

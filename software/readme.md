@@ -1,36 +1,22 @@
 ## Software
 
-This folder contains the host-side Python client for communicating with
-AZSensorSuite over BLE.
-
-**ML functionality has not been implemented yet, and will not be implemented in the forseeable future.**
+The host-side Python client reads live values from AZSensorSuite over BLE and exports ToF and ambient logs to CSV.
 
 > [!WARNING]
 > This client was written quickly to test the firmware and is due for a rewrite. Please expect and report bugs.
 
-*Python 3.7 or higher is required.*
-
-##
-
-### Overview
-
-The intended data flow is:
-```
-Device (BLE) → azss_client.py → csvs/ → azss_train.py → model → azss_infer.py → prediction
-```
-
-The BLE client is currently implemented. Model training and infer scripts 
-are in progress.
-
 ## azss_client.py
+
 ### Setup
+
+Use Python 3.10 or newer for the current [Bleak dependency](https://pypi.org/project/bleak/). Run these commands from the `software` directory.
+
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 > [!NOTE]
-> On macOS, Bleak exposes CoreBluetooth UUIDs rather than MAC addresses. 
-> When prompted for a Bluetooth address, use the UUID string instead.
+> `connect` requires a Bluetooth MAC address. On macOS, Bleak returns a CoreBluetooth UUID, which the current client rejects. Use the client on a host where Bleak exposes MAC addresses.
 
 ### Usage
 ```bash
@@ -45,22 +31,20 @@ or `exit` to quit.
 | Command | Requires Connection | Description |
 |---|---|---|
 | `scan` | No | Scan for nearby BLE devices |
-| `connect` | No | Connect to a device by Bluetooth address |
+| `connect` | No | Connect to a device by Bluetooth MAC address |
 | `disconnect` | No | Disconnect from the current device |
-| `unpair` | No | Unpair the current device |
-| `read uuid` | Yes | Read a characteristic by UUID |
-| `read count` | Yes | Read detected object count since last initialisation |
-| `read temp` | Yes | Read temperature (returns °C, °F, and K) |
+| `read count` | Yes | Read the number of retained ToF events |
+| `read temperature` (`read temp`) | Yes | Read temperature (returns °C, °F, and K) |
 | `read humidity` | Yes | Read relative humidity |
 | `read time` | Yes | Read the current device timestamp in milliseconds |
 | `write` | Yes | Send a raw hex command byte to the Command characteristic |
 | `write time` | Yes | Sync device base timestamp to system time |
 | `write time custom` | Yes | Write a custom base timestamp in milliseconds |
-| `download` | Yes | Download the full timestamp and ambient log |
+| `download` | Yes | Download the ToF and ambient logs |
 
 ### Download Output
 
-Data is written to the `csvs/` folder, created automatically if it does not exist.
+The client creates `csvs/` in the current working directory and overwrites the two output files on each download. Copy or rename any files you want to keep before downloading again. The firmware drains entries that are still in RAM during a download, so save the CSVs if you need those entries later.
 
 **`stamps.csv`** — ToF event log
 
@@ -72,7 +56,7 @@ Data is written to the `csvs/` folder, created automatically if it does not exis
 | `cumulative_i64` | Cumulative elapsed seconds since base timestamp |
 | `real_i64` | Absolute Unix timestamp in seconds |
 
-**`ambient.csv`** — Temperature and humidity log (sampled every 15 minutes)
+**`ambient.csv`** — Temperature and humidity log. The client estimates timestamps from the base timestamp using a fixed 15-minute interval. Pauses in sampling or a custom firmware sampling interval can make these timestamps differ from the actual sample times.
 
 | Column | Description |
 |---|---|
@@ -80,8 +64,4 @@ Data is written to the `csvs/` folder, created automatically if it does not exis
 | `seq` | BLE packet sequence number |
 | `temp_i8` | Temperature in °C |
 | `humidity_u8` | Relative humidity as a percentage |
-| `real_i64` | Absolute Unix timestamp in seconds |
-
-## azss_train.py
-
-## azss_infer.py
+| `real_i64` | Estimated Unix timestamp in seconds |
