@@ -40,6 +40,15 @@ class BleCmd(enum.IntEnum):
     STREAM_START = 0x10
     STREAM_STOP  = 0x11
     FW_VERSION   = 0x20
+    AMBIENT_SAMPLE        = 0x21
+    AMBIENT_SAMPLE_STATUS = 0x22
+
+class AmbientSampleStatus(enum.IntEnum):
+    UNSUPPORTED = 1
+    PENDING     = 2
+    COMPLETE    = 3
+    FAILED      = 4
+    UNAVAILABLE = 5
 
 BULK_FLAG_LAST = 0x01
 BULK_HDR_LEN   = 4
@@ -61,6 +70,7 @@ CONNECT_TIMEOUT        = 45
 CONNECT_RETRIES        = 3
 POST_CONNECT_DELAY     = 0.5
 DOWNLOAD_TOTAL_TIMEOUT = 900   # 15 minutes
+AMBIENT_SAMPLE_TIMEOUT = 10
 
 CSV_DIR = Path("csvs")
 
@@ -187,6 +197,7 @@ class AzssSession:
         self._scan_cache: Dict[str, SeenDevice] = {}
         self._disconnect_event = asyncio.Event()
         self._lock = asyncio.Lock()
+        self._command_lock = asyncio.Lock()
 
     async def __aenter__(self) -> "AzssSession":
         return self
@@ -309,6 +320,38 @@ class AzssSession:
             raise RuntimeError("Not connected")
         async with self._lock:
             await self._client.write_gatt_char(uuid_str, data, response=response)
+
+    async def run_command(self, command: int) -> int:
+        async with self._command_lock:
+            await self.write_char(COMMAND_UUID, bytes([command]))
+            reply = await self.read_char(COMMAND_UUID)
+        if len(reply) != 1:
+            raise RuntimeError("Invalid BLE command reply length")
+        return reply[0]
+
+    async def sample_ambient(self) -> tuple[int, int]:
+        status = await self.run_command(BleCmd.AMBIENT_SAMPLE)
+        while status == AmbientSampleStatus.PENDING:
+            await asyncio.sleep(0.2)
+            status = await self.run_command(BleCmd.AMBIENT_SAMPLE_STATUS)
+
+        if status == AmbientSampleStatus.UNSUPPORTED:
+            raise RuntimeError("Firmware does not support manual ambient sampling")
+        if status == AmbientSampleStatus.UNAVAILABLE:
+            raise RuntimeError("Ambient sampling is disabled in this firmware build")
+        if status == AmbientSampleStatus.FAILED:
+            raise RuntimeError("Ambient sample failed on the device")
+        if status != AmbientSampleStatus.COMPLETE:
+            raise RuntimeError(f"Unexpected ambient sample status {status}")
+
+        return await self.read_ambient()
+
+    async def read_ambient(self) -> tuple[int, int]:
+        temp = await self.read_char(TEMP_UUID)
+        humidity = await self.read_char(HUMIDITY_UUID)
+        if len(temp) != 4 or len(humidity) != 4:
+            raise RuntimeError("Invalid ambient reading length")
+        return int.from_bytes(temp, "little", signed=True), int.from_bytes(humidity, "little")
 
     async def start_notify(self, uuid_str: str, callback: Callable[[int, bytearray], None]) -> None:
         if self._client is None or not self._client.is_connected:
@@ -571,15 +614,33 @@ async def cmd_read_count(s: AzssSession) -> None:
     count = int.from_bytes(data, "little", signed=False)
     info(f"Object count: {count}")
 
+def print_temperature(c: int) -> None:
+    info(f"Temperature: {c} °C / {9*c/5+32:.1f} °F / {c+273.15:.1f} K")
+
+def print_ambient(temp: int, humidity: int) -> None:
+    print_temperature(temp)
+    info(f"Humidity: {humidity} %")
+
 async def cmd_read_temp(s: AzssSession) -> None:
     raw = await s.read_char(TEMP_UUID)
     c = int.from_bytes(raw, "little", signed=True)
-    info(f"Temperature: {c} °C / {9*c/5+32:.1f} °F / {c+273.15:.1f} K")
+    print_temperature(c)
 
 async def cmd_read_humidity(s: AzssSession) -> None:
     raw = await s.read_char(HUMIDITY_UUID)
     rh = int.from_bytes(raw, "little", signed=False)
     info(f"Humidity: {rh} %")
+
+async def cmd_read_ambient(s: AzssSession) -> None:
+    temp, humidity = await s.read_ambient()
+    print_ambient(temp, humidity)
+
+async def cmd_sample_ambient(s: AzssSession) -> None:
+    try:
+        temp, humidity = await asyncio.wait_for(s.sample_ambient(), AMBIENT_SAMPLE_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise RuntimeError("Timed out waiting for a fresh ambient sample") from None
+    print_ambient(temp, humidity)
 
 async def cmd_read_time(s: AzssSession) -> None:
     raw = await s.read_char(CURR_TIMESTAMP_UUID)
@@ -608,9 +669,8 @@ async def cmd_write_command(s: AzssSession) -> None:
     except ValueError as e:
         error(str(e))
         return
-    await s.write_char(COMMAND_UUID, bytes([cmd]))
-    reply = await s.read_char(COMMAND_UUID)
-    info(f"Command 0x{cmd:02X} returned {reply[0]} (0x{reply[0]:02X})")
+    reply = await s.run_command(cmd)
+    info(f"Command 0x{cmd:02X} returned {reply} (0x{reply:02X})")
 
 async def cmd_download(s: AzssSession) -> None:
     dl = BulkDownloader(s, total_timeout=DOWNLOAD_TOTAL_TIMEOUT)
@@ -629,6 +689,8 @@ COMMANDS: Dict[str, tuple[Callable, bool, tuple[str, ...]]] = {
     "read count":        (cmd_read_count,        True,  ("read people", "read objects")),
     "read temperature":  (cmd_read_temp,         True,  ("read temp",)),
     "read humidity":     (cmd_read_humidity,     True,  ("read rh", "read humid")),
+    "read ambient":      (cmd_read_ambient,      True,  ()),
+    "sample ambient":    (cmd_sample_ambient,    True,  ()),
     "read time":         (cmd_read_time,         True,  ()),
     "write time":        (cmd_write_time,        True,  ("write time system",)),
     "write time custom": (cmd_write_custom_time, True,  ()),

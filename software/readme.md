@@ -36,6 +36,8 @@ or `exit` to quit.
 | `read count` | Yes | Read the number of retained ToF events |
 | `read temperature` (`read temp`) | Yes | Read temperature (returns °C, °F, and K) |
 | `read humidity` | Yes | Read relative humidity |
+| `read ambient` | Yes | Display the latest cached temperature and relative humidity |
+| `sample ambient` | Yes | Request a fresh SHT30 reading and display temperature and relative humidity |
 | `read time` | Yes | Read the current device timestamp in milliseconds |
 | `write` | Yes | Send a raw hex command byte to the Command characteristic |
 | `write time` | Yes | Sync device base timestamp to system time |
