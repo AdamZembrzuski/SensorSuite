@@ -23,5 +23,5 @@ Layout for each entry:
 
 | Competition | Month | Year | Status | Notes |
 |---|---|---|---|---|
-| IoE National Electronics Competition | 08 | 2026 | Waiting for result | |
+| IoE National Electronics Competition | 08 | 2026 | **Category 3 Winner** | |
 | Sentinus Young Innovators | 11 | 2026 | Selected as finalist | |
